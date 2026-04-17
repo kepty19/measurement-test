@@ -163,29 +163,105 @@ function clearFooterError() {
   el.hidden = true;
 }
 
-function validateVocabComplete() {
+function getIncompleteVocabIndices() {
   const areas = document.querySelectorAll("#vocab-root .vocab__input");
-  if (!areas.length) return false;
-  for (let i = 0; i < areas.length; i++) {
-    if (!(areas[i].value || "").trim()) return false;
-  }
-  return true;
+  const miss = [];
+  areas.forEach((el, i) => {
+    if (!(el.value || "").trim()) miss.push(i + 1);
+  });
+  return miss;
 }
 
-function validateGrammarComplete() {
+function getIncompleteGrammarIndices() {
   saveCurrentGrammarSelection();
-  if (!grammarRows.length) return false;
-  return (
-    grammarAnswers.length === grammarRows.length &&
-    grammarAnswers.every((a) => a != null && String(a).trim() !== "")
-  );
+  if (!grammarRows.length) return [];
+  const miss = [];
+  grammarAnswers.forEach((a, i) => {
+    if (a == null || String(a).trim() === "") miss.push(i + 1);
+  });
+  return miss;
 }
 
-function showFooterError(msg) {
-  const el = document.getElementById("footer-error");
-  if (!el) return;
-  el.textContent = msg;
-  el.hidden = false;
+function formatQuestionNums(nums) {
+  return nums.map((n) => `#${n}`).join("、");
+}
+
+function showIncompleteModal(message) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("incomplete-modal");
+    const msgEl = document.getElementById("incomplete-modal-message");
+    const okBtn = document.getElementById("incomplete-modal-ok");
+    const cancelBtn = document.getElementById("incomplete-modal-cancel");
+    const backdrop = modal.querySelector("[data-modal-dismiss]");
+    msgEl.textContent = message;
+    modal.hidden = false;
+
+    function cleanup() {
+      modal.hidden = true;
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      backdrop.removeEventListener("click", onCancel);
+      document.removeEventListener("keydown", onKey);
+    }
+
+    function onOk() {
+      cleanup();
+      resolve(true);
+    }
+    function onCancel() {
+      cleanup();
+      resolve(false);
+    }
+    function onKey(e) {
+      if (e.key === "Escape") onCancel();
+    }
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    backdrop.addEventListener("click", onCancel);
+    document.addEventListener("keydown", onKey);
+    okBtn.focus();
+  });
+}
+
+async function tryGoForwardTo(targetStep) {
+  if (targetStep <= currentStep) return;
+  saveCurrentGrammarSelection();
+  const nextBtn = document.getElementById("btn-next");
+  nextBtn.disabled = true;
+  try {
+    if (currentStep === 0) {
+      if (targetStep >= 1) {
+        const missV = getIncompleteVocabIndices();
+        if (missV.length) {
+          const msg = `設問 ${formatQuestionNums(missV)} が未入力ですが、よろしいでしょうか。`;
+          if (!(await showIncompleteModal(msg))) return;
+        }
+      }
+      if (targetStep === 1) {
+        setStep(1);
+        return;
+      }
+      if (targetStep === 2) {
+        const missG = getIncompleteGrammarIndices();
+        if (missG.length) {
+          const msg = `設問 ${formatQuestionNums(missG)} が未選択ですが、よろしいでしょうか。`;
+          if (!(await showIncompleteModal(msg))) return;
+        }
+        setStep(2);
+        return;
+      }
+    }
+    if (currentStep === 1 && targetStep === 2) {
+      const missG = getIncompleteGrammarIndices();
+      if (missG.length) {
+        const msg = `設問 ${formatQuestionNums(missG)} が未選択ですが、よろしいでしょうか。`;
+        if (!(await showIncompleteModal(msg))) return;
+      }
+      setStep(2);
+    }
+  } finally {
+    nextBtn.disabled = false;
+  }
 }
 
 function saveCurrentGrammarSelection() {
@@ -201,11 +277,14 @@ function renderVocabulary(rows) {
   rows.forEach((row) => {
     const en = vocabEnglishForPrompt(row);
     if (!en) return;
+    const num = n + 1;
     const id = `vocab-${n++}`;
     const item = document.createElement("article");
     item.className = "vocab__item";
     item.innerHTML = `
-      <p class="vocab__prompt">${escapeHtml(en)}</p>
+      <p class="vocab__prompt">
+        <span class="vocab__index">#${num}</span><span class="vocab__word">${escapeHtml(en)}</span>
+      </p>
       <label class="vocab__label" for="${id}">日本語の意味を入力</label>
       <input type="text" id="${id}" class="vocab__input" autocomplete="off" spellcheck="false" placeholder="例：サッカー" />
     `;
@@ -232,7 +311,7 @@ function buildGrammarCard() {
 
   root.innerHTML = `
     <div class="grammar__toolbar">
-      <span class="grammar__progress">問題 ${grammarIndex + 1} / ${grammarRows.length}</span>
+      <span class="grammar__progress">設問 <span class="grammar__index">#${grammarIndex + 1}</span><span class="grammar__total"> / ${grammarRows.length}</span></span>
     </div>
     <div class="grammar__card">
       <p class="grammar__inline-error" id="grammar-inline-error" role="alert" hidden>選択肢を1つ選んでから次の問題へ進んでください。</p>
@@ -657,29 +736,16 @@ document.getElementById("btn-prev").addEventListener("click", () => {
   if (currentStep === 1) saveCurrentGrammarSelection();
   setStep(currentStep - 1);
 });
-document.getElementById("btn-next").addEventListener("click", () => {
-  if (currentStep === 1) saveCurrentGrammarSelection();
+document.getElementById("btn-next").addEventListener("click", async () => {
   if (currentStep < 2) {
-    if (currentStep === 0) {
-      if (!validateVocabComplete()) {
-        showFooterError("すべての単語に回答を入力してから次へ進んでください。");
-        return;
-      }
-    }
-    if (currentStep === 1) {
-      if (!validateGrammarComplete()) {
-        showFooterError("すべての文法問題に回答してから次へ進んでください。");
-        return;
-      }
-    }
-    setStep(currentStep + 1);
+    await tryGoForwardTo(currentStep + 1);
     return;
   }
   submitResults();
 });
 
 document.querySelectorAll("#test-flow .stepper__btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
+  btn.addEventListener("click", async () => {
     if (currentStep === 1) saveCurrentGrammarSelection();
     const go = Number(btn.getAttribute("data-go"));
     if (Number.isNaN(go)) return;
@@ -688,19 +754,7 @@ document.querySelectorAll("#test-flow .stepper__btn").forEach((btn) => {
       return;
     }
     if (go === currentStep) return;
-    if (go >= 1) {
-      if (!validateVocabComplete()) {
-        showFooterError("すべての単語に回答を入力してからお進みください。");
-        return;
-      }
-    }
-    if (go >= 2) {
-      if (!validateGrammarComplete()) {
-        showFooterError("すべての文法問題に回答してからお進みください。");
-        return;
-      }
-    }
-    setStep(go);
+    await tryGoForwardTo(go);
   });
 });
 
