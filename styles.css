@@ -150,6 +150,7 @@ h1 {
 .intro__input {
   width: 100%;
   padding: 0.85rem 1rem;
+  margin-bottom: 0.35rem;
   border: 1px solid #e7e5e4;
   border-radius: 12px;
   font: inherit;
@@ -168,7 +169,7 @@ h1 {
 .intro__start {
   width: 100%;
   padding: 0.85rem 1rem;
-  margin-top: 1.25rem;
+  margin-top: 1.85rem;
   border-radius: 12px;
   font-size: 0.95rem;
   letter-spacing: 0.02em;
@@ -374,13 +375,13 @@ h1 {
 
 .vocab__input {
   width: 100%;
-  min-height: 3rem;
-  padding: 0.65rem 0.85rem;
+  min-height: unset;
+  height: 2.85rem;
+  padding: 0.55rem 0.85rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   font: inherit;
   font-size: 0.95rem;
-  resize: vertical;
 }
 
 .vocab__input:focus {
@@ -522,10 +523,11 @@ h1 {
 
 .speaking-guide {
   margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
 }
 
 .speaking:not(.hidden) {
-  margin-top: 1rem;
+  margin-top: 1.75rem;
 }
 
 /* Footer */

@@ -199,7 +199,7 @@ function renderVocabulary(rows) {
   root.innerHTML = "";
   let n = 0;
   rows.forEach((row) => {
-    const en = (row.english || "").trim();
+    const en = vocabEnglishForPrompt(row);
     if (!en) return;
     const id = `vocab-${n++}`;
     const item = document.createElement("article");
@@ -207,7 +207,7 @@ function renderVocabulary(rows) {
     item.innerHTML = `
       <p class="vocab__prompt">${escapeHtml(en)}</p>
       <label class="vocab__label" for="${id}">日本語の意味を入力</label>
-      <textarea id="${id}" class="vocab__input" rows="2" autocomplete="off" spellcheck="false" placeholder="例：サッカー"></textarea>
+      <input type="text" id="${id}" class="vocab__input" autocomplete="off" spellcheck="false" placeholder="例：サッカー" />
     `;
     root.appendChild(item);
   });
@@ -298,6 +298,12 @@ function buildGrammarCard() {
 
 function trainingTopicFromRow(row) {
   if (!row || typeof row !== "object") return "";
+  /** gviz JSON（ラベル空）や CSV の C 列 */
+  const fromC = row.C ?? row.c ?? row.col2;
+  if (fromC != null && String(fromC).trim()) {
+    const s = String(fromC).trim();
+    if (s.toLowerCase() !== "training topic") return s;
+  }
   const keys = Object.keys(row);
   for (const k of keys) {
     if (k.replace(/\s+/g, " ").trim().toLowerCase() === "training topic") {
@@ -308,6 +314,21 @@ function trainingTopicFromRow(row) {
   const direct = row["training topic"] ?? row["training topic "] ?? row["Training topic"];
   if (direct != null && String(direct).trim()) return String(direct);
   return "";
+}
+
+function isSpeakingHeaderRow(row) {
+  const tt = trainingTopicFromRow(row).trim().toLowerCase();
+  if (tt === "training topic") return true;
+  const a = String(row.A ?? row.col0 ?? "").trim().toLowerCase();
+  if (a === "no." || a === "no") return true;
+  return false;
+}
+
+/** 英語プロンプトのみ表示（level 列や誤結合の Stage 行は出さない） */
+function vocabEnglishForPrompt(row) {
+  let raw = (row.english || "").trim();
+  raw = raw.replace(/^stage\s*\d+\s*[:\-–—]?\s*/i, "").trim();
+  return raw;
 }
 
 /** Google Visualization API の JSON（setResponse）をパースして行オブジェクトの配列にする */
@@ -325,7 +346,11 @@ function parseGvizJson(text) {
     return [];
   }
   if (payload.status !== "ok" || !payload.table) return [];
-  const cols = (payload.table.cols || []).map((c) => (c.label || "").trim());
+  const cols = (payload.table.cols || []).map((c, i) => {
+    const lab = (c.label || "").trim();
+    const id = (c.id || "").trim();
+    return lab || id || `col${i}`;
+  });
   const rows = payload.table.rows || [];
   return rows.map((r) => {
     const o = {};
@@ -345,14 +370,25 @@ function parseGvizJson(text) {
 function themeFromRow(row) {
   if (!row || typeof row !== "object") return "";
   const hit = Object.keys(row).find((k) => k.replace(/\s+/g, " ").trim().toLowerCase() === "theme");
-  if (hit) return String(row[hit] || "").trim();
+  if (hit) {
+    const s = String(row[hit] || "").trim();
+    if (s.toLowerCase() !== "theme") return s;
+  }
+  const b = row.B ?? row.b ?? row.col1;
+  if (b != null && String(b).trim()) {
+    const s = String(b).trim();
+    if (s.toLowerCase() !== "theme") return s;
+  }
   return String(row.theme || "").trim();
 }
 
 function renderSpeaking(rows) {
   const root = document.getElementById("speaking-root");
   root.innerHTML = "";
-  const dataRows = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0).slice(0, 2);
+  const dataRows = rows
+    .filter((r) => !isSpeakingHeaderRow(r))
+    .filter((r) => trainingTopicFromRow(r).trim().length > 0)
+    .slice(0, 2);
   speakingTopicCount = dataRows.length;
   dataRows.forEach((row, i) => {
     const text = trainingTopicFromRow(row).replace(/\r\n/g, "\n").trim();
@@ -377,7 +413,7 @@ function collectVocabAnswers() {
   const items = [];
   let i = 0;
   vocabRows.forEach((row) => {
-    const en = (row.english || "").trim();
+    const en = vocabEnglishForPrompt(row);
     if (!en) return;
     const ja = (row.japanese || "").trim();
     const userText = areas[i] ? areas[i].value : "";
@@ -502,14 +538,20 @@ async function submitResults() {
   }
 }
 
+function speakingRowsWithTopics(rows) {
+  return rows
+    .filter((r) => !isSpeakingHeaderRow(r))
+    .filter((r) => trainingTopicFromRow(r).trim().length > 0);
+}
+
 async function fetchSpeakingRows() {
-  /** CSV はシート上の行順（2行目→3行目）を保ちやすいので優先する */
+  /** セル内改行があると CSV(Papa) が壊れるため、JSON を最優先する */
   try {
-    const sCsv = await fetchCsv(GVIZ("Speaking"));
-    const sParsed = parseCsv(sCsv);
-    const fromCsv = (sParsed.data || []).filter((r) => trainingTopicFromRow(r).trim().length > 0);
-    if (fromCsv.length >= 2) return fromCsv.slice(0, 2);
-    if (fromCsv.length === 1) return fromCsv;
+    const plain = await fetchCsv(GVIZ_JSON("Speaking"));
+    const rows = parseGvizJson(plain);
+    const withTopic = speakingRowsWithTopics(rows);
+    if (withTopic.length >= 2) return withTopic.slice(0, 2);
+    if (withTopic.length === 1) return withTopic;
   } catch (e) {
     console.warn(e);
   }
@@ -523,18 +565,25 @@ async function fetchSpeakingRows() {
     try {
       const text = await fetchCsv(speakingGvizUrlWithQuery(tq));
       const rows = parseGvizJson(text);
-      const withTopic = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0);
+      const withTopic = speakingRowsWithTopics(rows);
       if (withTopic.length >= 2) return withTopic.slice(0, 2);
+      if (withTopic.length === 1) return withTopic;
     } catch (e) {
       console.warn(e);
     }
   }
+
   try {
-    const plain = await fetchCsv(GVIZ_JSON("Speaking"));
-    const rows = parseGvizJson(plain);
-    const withTopic = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0);
-    if (withTopic.length >= 2) return withTopic.slice(0, 2);
-    return withTopic;
+    const sCsv = await fetchCsv(GVIZ("Speaking"));
+    const sParsed = Papa.parse(sCsv, {
+      header: true,
+      skipEmptyLines: "greedy",
+      relaxColumnCount: true,
+      relaxQuotes: true,
+    });
+    const fromCsv = speakingRowsWithTopics(sParsed.data || []);
+    if (fromCsv.length >= 2) return fromCsv.slice(0, 2);
+    if (fromCsv.length === 1) return fromCsv;
   } catch (e) {
     console.warn(e);
   }
@@ -551,7 +600,7 @@ async function loadData() {
 
     const vocabParsed = parseCsv(vText);
     if (vocabParsed.errors.length) console.warn(vocabParsed.errors);
-    vocabRows = vocabParsed.data.filter((r) => (r.english || "").trim());
+    vocabRows = vocabParsed.data.filter((r) => vocabEnglishForPrompt(r));
     vocabStatus.classList.add("hidden");
     document.getElementById("vocab-root").classList.remove("hidden");
     renderVocabulary(vocabRows);
