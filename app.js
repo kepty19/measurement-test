@@ -129,12 +129,6 @@ function vocabIsCorrect(userText, expectedJa) {
   return false;
 }
 
-const HINTS = [
-  'パート 1「単語テスト」を実施中',
-  'パート 2「文法テスト」を実施中',
-  'パート 3「スピーキングテスト」を実施中',
-];
-
 let participantName = "";
 let currentStep = 0;
 let vocabRows = [];
@@ -159,9 +153,14 @@ function setStep(n) {
   document.getElementById("btn-next").textContent = isLast
     ? "①②の結果を送信し、スピーキングへ進む"
     : "次へ進む";
-  const fh = document.getElementById("footer-hint");
-  fh.textContent = HINTS[currentStep];
-  fh.classList.remove("footer-nav__hint--error");
+  clearFooterError();
+}
+
+function clearFooterError() {
+  const el = document.getElementById("footer-error");
+  if (!el) return;
+  el.textContent = "";
+  el.hidden = true;
 }
 
 function validateVocabComplete() {
@@ -183,9 +182,10 @@ function validateGrammarComplete() {
 }
 
 function showFooterError(msg) {
-  const el = document.getElementById("footer-hint");
+  const el = document.getElementById("footer-error");
+  if (!el) return;
   el.textContent = msg;
-  el.classList.add("footer-nav__hint--error");
+  el.hidden = false;
 }
 
 function saveCurrentGrammarSelection() {

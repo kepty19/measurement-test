@@ -41,31 +41,28 @@
 
       <div id="test-flow" class="test-flow hidden" hidden>
         <header class="header header--test">
-          <h1>現状把握テスト</h1>
+          <h1 class="header__title">現状把握テスト</h1>
           <p class="participant-badge" id="participant-display" aria-live="polite"></p>
         </header>
 
         <nav class="stepper" aria-label="テストのパート">
           <ol class="stepper__list">
             <li class="stepper__item" data-step="0">
-              <button type="button" class="stepper__btn" data-go="0">
-                <span class="stepper__num">①</span>
-                <span class="stepper__label">単語テスト</span>
-                <span class="stepper__done" aria-hidden="true">☑️</span>
+              <button type="button" class="stepper__btn" data-go="0" aria-label="単語テスト">
+                <span class="stepper__circle" aria-hidden="true">1</span>
+                <span class="stepper__label">単語</span>
               </button>
             </li>
             <li class="stepper__item" data-step="1">
-              <button type="button" class="stepper__btn" data-go="1">
-                <span class="stepper__num">②</span>
-                <span class="stepper__label">文法テスト</span>
-                <span class="stepper__done" aria-hidden="true">☑️</span>
+              <button type="button" class="stepper__btn" data-go="1" aria-label="文法テスト">
+                <span class="stepper__circle" aria-hidden="true">2</span>
+                <span class="stepper__label">文法</span>
               </button>
             </li>
             <li class="stepper__item" data-step="2">
-              <button type="button" class="stepper__btn" data-go="2">
-                <span class="stepper__num">③</span>
-                <span class="stepper__label">スピーキングテスト</span>
-                <span class="stepper__done" aria-hidden="true">☑️</span>
+              <button type="button" class="stepper__btn" data-go="2" aria-label="スピーキングテスト">
+                <span class="stepper__circle" aria-hidden="true">3</span>
+                <span class="stepper__label">スピーキング</span>
               </button>
             </li>
           </ol>
@@ -118,9 +115,11 @@
         </main>
 
         <footer class="footer-nav" id="footer-nav">
-          <button type="button" class="btn btn--ghost" id="btn-prev" disabled>前に戻る</button>
-          <div class="footer-nav__hint" id="footer-hint">パート 1「単語テスト」を実施中</div>
-          <button type="button" class="btn btn--primary btn--footer-primary" id="btn-next">次へ進む</button>
+          <p class="footer-nav__error" id="footer-error" role="alert" hidden></p>
+          <div class="footer-nav__actions">
+            <button type="button" class="btn btn--ghost btn--footer" id="btn-prev" disabled>前に戻る</button>
+            <button type="button" class="btn btn--primary btn--footer-primary" id="btn-next">次へ進む</button>
+          </div>
         </footer>
       </div>
 
