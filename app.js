@@ -137,6 +137,114 @@ let grammarAnswers = [];
 let grammarIndex = 0;
 let speakingTopicCount = 0;
 
+const SESSION_KEY = "kepty-measurement-session-v1";
+let restoringSession = false;
+
+function getCurrentScreen() {
+  const th = document.getElementById("screen-thanks");
+  const flow = document.getElementById("test-flow");
+  if (th && !th.hasAttribute("hidden")) return "thanks";
+  if (flow && !flow.hasAttribute("hidden")) return "test";
+  return "intro";
+}
+
+function collectVocabSnapshot() {
+  const arr = [];
+  document.querySelectorAll("#vocab-root .vocab__input").forEach((el) => {
+    arr.push(el.value || "");
+  });
+  return arr;
+}
+
+function persistSessionState() {
+  if (restoringSession) return;
+  try {
+    saveCurrentGrammarSelection();
+    const nameEl = document.getElementById("participant-name");
+    const payload = {
+      v: 1,
+      screen: getCurrentScreen(),
+      participantName: participantName || "",
+      nameDraft: nameEl ? nameEl.value || "" : "",
+      currentStep,
+      grammarIndex,
+      grammarAnswers: grammarAnswers.slice(),
+      vocabAnswers: collectVocabSnapshot(),
+    };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+function restoreSessionState() {
+  restoringSession = true;
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (s.v !== 1) return;
+
+    if (s.screen === "thanks") {
+      participantName = s.participantName || "";
+      showThankYou();
+      if (participantName) {
+        const pd = document.getElementById("participant-display");
+        if (pd) pd.textContent = `実施者：${participantName}`;
+      }
+      return;
+    }
+
+    if (s.screen === "test") {
+      participantName = s.participantName || "";
+      const nameInput = document.getElementById("participant-name");
+      if (nameInput && typeof s.nameDraft === "string") nameInput.value = s.nameDraft;
+      const pd = document.getElementById("participant-display");
+      if (pd) pd.textContent = participantName ? `実施者：${participantName}` : "";
+
+      if (grammarRows.length) {
+        grammarAnswers = grammarRows.map((_, i) => {
+          const a = s.grammarAnswers && s.grammarAnswers[i];
+          if (a == null || String(a).trim() === "") return null;
+          return String(a);
+        });
+        grammarIndex =
+          typeof s.grammarIndex === "number"
+            ? Math.max(0, Math.min(s.grammarIndex, grammarRows.length - 1))
+            : 0;
+        buildGrammarCard();
+      }
+
+      if (Array.isArray(s.vocabAnswers)) {
+        const inputs = document.querySelectorAll("#vocab-root .vocab__input");
+        const n = Math.min(s.vocabAnswers.length, inputs.length);
+        for (let i = 0; i < n; i++) {
+          inputs[i].value = s.vocabAnswers[i] || "";
+        }
+      }
+
+      document.getElementById("intro").classList.add("hidden");
+      document.getElementById("intro").setAttribute("hidden", "");
+      const flow = document.getElementById("test-flow");
+      flow.classList.remove("hidden");
+      flow.removeAttribute("hidden");
+      const step = typeof s.currentStep === "number" ? s.currentStep : 0;
+      setStep(Math.max(0, Math.min(2, step)));
+      return;
+    }
+
+    if (s.screen === "intro" && typeof s.nameDraft === "string") {
+      const nameInput = document.getElementById("participant-name");
+      if (nameInput) nameInput.value = s.nameDraft;
+    }
+  } catch (e) {
+    console.warn(e);
+  } finally {
+    restoringSession = false;
+    persistSessionState();
+  }
+}
+
 function setStep(n) {
   currentStep = Math.max(0, Math.min(2, n));
   document.querySelectorAll("#test-flow .panel").forEach((el, i) => {
@@ -154,6 +262,7 @@ function setStep(n) {
     ? "①②の結果を送信し、スピーキングへ進む"
     : "次へ進む";
   clearFooterError();
+  persistSessionState();
 }
 
 function clearFooterError() {
@@ -343,6 +452,7 @@ function buildGrammarCard() {
       grammarAnswers[grammarIndex] = inp.value;
       const err = document.getElementById("grammar-inline-error");
       if (err) err.hidden = true;
+      persistSessionState();
     });
   });
 
@@ -373,6 +483,7 @@ function buildGrammarCard() {
       }
     });
   }
+  persistSessionState();
 }
 
 function trainingTopicFromRow(row) {
@@ -566,6 +677,7 @@ function showThankYou() {
   const th = document.getElementById("screen-thanks");
   th.classList.remove("hidden");
   th.removeAttribute("hidden");
+  persistSessionState();
 }
 
 function downloadPayload(obj) {
@@ -754,4 +866,14 @@ document.querySelectorAll("#test-flow .stepper__btn").forEach((btn) => {
   });
 });
 
-loadData();
+loadData()
+  .then(() => {
+    restoreSessionState();
+    const nameEl = document.getElementById("participant-name");
+    const vocabRoot = document.getElementById("vocab-root");
+    if (nameEl) nameEl.addEventListener("input", persistSessionState);
+    if (vocabRoot) vocabRoot.addEventListener("input", persistSessionState);
+  })
+  .catch((e) => console.error(e));
+
+window.addEventListener("pagehide", persistSessionState);

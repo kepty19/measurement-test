@@ -84,18 +84,6 @@ h1 {
     0 0 0 1px rgba(194, 65, 12, 0.06);
 }
 
-.intro__shell::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 4px;
-  border-radius: 16px 16px 0 0;
-  background: linear-gradient(90deg, var(--accent) 0%, #ea580c 45%, #fdba74 100%);
-  opacity: 0.95;
-}
-
 .intro__brand-row {
   display: flex;
   justify-content: flex-end;
@@ -116,7 +104,7 @@ h1 {
   margin: 0 0 0.5rem;
 }
 
-/* Kepty English — 表紙は上段行、サンクスは右上固定 */
+/* Kepty English — 表紙・サンクス共通スタイル（表紙は上段行で右寄せ） */
 .brand-badge {
   margin: 0;
   font-size: 0.62rem;
@@ -147,10 +135,8 @@ h1 {
 }
 
 .brand-badge--thanks {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 2;
+  position: static;
+  flex-shrink: 0;
 }
 
 .intro__card {
@@ -777,28 +763,43 @@ h1 {
 }
 
 .screen-thanks {
-  min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem clamp(1.25rem, 5vw, 1.75rem);
+  min-height: 100dvh;
+  min-height: 100vh;
+  margin: -2rem calc(-1 * clamp(1.25rem, 5vw, 1.75rem)) -6rem;
+  padding: max(2rem, min(8vh, 5rem)) clamp(1.25rem, 5vw, 1.75rem) max(4rem, 12vh);
+  padding-top: max(2rem, env(safe-area-inset-top, 0px), min(8vh, 5rem));
+  padding-bottom: max(4rem, 12vh, env(safe-area-inset-bottom, 0px));
   background: #ffffff;
+  box-sizing: border-box;
 }
 
 .screen-thanks__shell {
-  position: relative;
   width: 100%;
-  max-width: 520px;
+  max-width: 480px;
   margin: 0 auto;
-  padding: 0.35rem 0.15rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1.35rem;
+}
+
+.screen-thanks__brand-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .screen-thanks__text {
-  margin: 3.65rem 0 0;
+  margin: 0;
   font-size: calc(1.35rem * 0.75);
   font-weight: 600;
   letter-spacing: 0.02em;
   text-align: center;
+  line-height: 1.55;
   color: var(--text);
 }
 
