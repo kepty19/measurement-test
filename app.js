@@ -8,6 +8,13 @@ const GVIZ_JSON = (sheet) =>
     sheet
   )}`;
 
+/** Speaking: C列に値がある行だけ取得（2行目・3行目のトピックを確実に含める） */
+function speakingGvizUrlWithQuery(tq) {
+  return `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=Speaking&tq=${encodeURIComponent(
+    tq
+  )}`;
+}
+
 const SUBMIT_URL = typeof window.SUBMIT_URL !== "undefined" ? window.SUBMIT_URL : "";
 const SUBMIT_SECRET = typeof window.SUBMIT_SECRET !== "undefined" ? window.SUBMIT_SECRET : "";
 
@@ -149,7 +156,9 @@ function setStep(n) {
   });
   document.getElementById("btn-prev").disabled = currentStep === 0;
   const isLast = currentStep === 2;
-  document.getElementById("btn-next").textContent = isLast ? "結果を送信" : "次へ進む";
+  document.getElementById("btn-next").textContent = isLast
+    ? "①②の結果を送信し、スピーキングへ進む"
+    : "次へ進む";
   document.getElementById("footer-hint").textContent = HINTS[currentStep];
 }
 
@@ -165,7 +174,6 @@ function renderVocabulary(rows) {
   let n = 0;
   rows.forEach((row) => {
     const en = (row.english || "").trim();
-    const ja = (row.japanese || "").trim();
     const level = (row.level || "").trim();
     if (!en) return;
     const id = `vocab-${n++}`;
@@ -176,17 +184,7 @@ function renderVocabulary(rows) {
       ${level ? `<p class="vocab__meta">${escapeHtml(level)}</p>` : ""}
       <label class="vocab__label" for="${id}">日本語の意味を入力</label>
       <textarea id="${id}" class="vocab__input" rows="2" autocomplete="off" spellcheck="false" placeholder="例：パン"></textarea>
-      <div class="vocab__check">
-        <button type="button" class="btn--small vocab__reveal">答え合わせ（正解の目安を表示）</button>
-        <p class="vocab__answer" role="status"></p>
-      </div>
     `;
-    const btn = item.querySelector(".vocab__reveal");
-    const ans = item.querySelector(".vocab__answer");
-    btn.addEventListener("click", () => {
-      ans.textContent = ja ? `目安：${ja}` : "（スプレッドシートに正解がありません）";
-      ans.classList.add("is-visible");
-    });
     root.appendChild(item);
   });
 }
@@ -412,12 +410,14 @@ function buildPayload() {
   return out;
 }
 
-function showToast(message, isError) {
-  const el = document.getElementById("submit-toast");
-  el.textContent = message;
-  el.classList.remove("hidden");
-  el.removeAttribute("hidden");
-  el.classList.toggle("toast--error", !!isError);
+function showThankYou() {
+  document.getElementById("intro").classList.add("hidden");
+  document.getElementById("intro").setAttribute("hidden", "");
+  document.getElementById("test-flow").classList.add("hidden");
+  document.getElementById("test-flow").setAttribute("hidden", "");
+  const th = document.getElementById("screen-thanks");
+  th.classList.remove("hidden");
+  th.removeAttribute("hidden");
 }
 
 function downloadPayload(obj) {
@@ -438,10 +438,7 @@ async function submitResults() {
 
   if (!SUBMIT_URL || !SUBMIT_URL.trim()) {
     downloadPayload(payload);
-    showToast(
-      "送信先 URL が未設定のため、結果を JSON でダウンロードしました。config.js に Apps Script の URL を設定してください。",
-      false
-    );
+    showThankYou();
     btn.disabled = false;
     return;
   }
@@ -463,17 +460,42 @@ async function submitResults() {
     if (!res.ok || data.ok === false) {
       throw new Error(data.error || text || `HTTP ${res.status}`);
     }
-    showToast("送信しました。スプレッドシートの「Result」「raw data」をご確認ください。", false);
   } catch (e) {
     console.error(e);
     downloadPayload(payload);
-    showToast(
-      "サーバー送信に失敗したため、結果を JSON で保存しました。ネットワーク・CORS・Apps Script のデプロイを確認してください。",
-      true
-    );
   } finally {
     btn.disabled = false;
+    showThankYou();
   }
+}
+
+async function fetchSpeakingRows() {
+  const queries = [
+    "SELECT * WHERE Col3 IS NOT NULL",
+    "SELECT A, B, C WHERE Col3 IS NOT NULL",
+    "SELECT * WHERE C IS NOT NULL",
+  ];
+  for (const tq of queries) {
+    try {
+      const text = await fetchCsv(speakingGvizUrlWithQuery(tq));
+      const rows = parseGvizJson(text);
+      const withTopic = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0);
+      if (withTopic.length >= 2) return withTopic;
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+  try {
+    const plain = await fetchCsv(GVIZ_JSON("Speaking"));
+    let rows = parseGvizJson(plain);
+    let withTopic = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0);
+    if (withTopic.length >= 2) return withTopic;
+  } catch (e) {
+    console.warn(e);
+  }
+  const sCsv = await fetchCsv(GVIZ("Speaking"));
+  const sParsed = parseCsv(sCsv);
+  return sParsed.data || [];
 }
 
 async function loadData() {
@@ -482,11 +504,7 @@ async function loadData() {
   const speakingStatus = document.getElementById("speaking-status");
 
   try {
-    const [vText, gText, sJsonText] = await Promise.all([
-      fetchCsv(GVIZ("Vocabulary")),
-      fetchCsv(GVIZ("Grammar")),
-      fetchCsv(GVIZ_JSON("Speaking")),
-    ]);
+    const [vText, gText] = await Promise.all([fetchCsv(GVIZ("Vocabulary")), fetchCsv(GVIZ("Grammar"))]);
 
     const vocabParsed = parseCsv(vText);
     if (vocabParsed.errors.length) console.warn(vocabParsed.errors);
@@ -503,12 +521,7 @@ async function loadData() {
     grammarIndex = 0;
     buildGrammarCard();
 
-    let speakingRows = parseGvizJson(sJsonText);
-    if (!speakingRows.length) {
-      const sCsv = await fetchCsv(GVIZ("Speaking"));
-      const sParsed = parseCsv(sCsv);
-      speakingRows = sParsed.data || [];
-    }
+    const speakingRows = await fetchSpeakingRows();
     speakingStatus.classList.add("hidden");
     document.getElementById("speaking-root").classList.remove("hidden");
     renderSpeaking(speakingRows);
