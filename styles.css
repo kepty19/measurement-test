@@ -96,14 +96,16 @@ h1 {
   opacity: 0.95;
 }
 
-.intro__head {
-  position: relative;
-  margin-bottom: 1.5rem;
+.intro__brand-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 0.85rem;
 }
 
 .intro__head-main {
   min-width: 0;
-  padding-right: clamp(7.25rem, 30vw, 10rem);
+  margin-bottom: 1.5rem;
 }
 
 .intro__head-main h1 {
@@ -114,12 +116,8 @@ h1 {
   margin: 0 0 0.5rem;
 }
 
-/* Kepty English — 表紙・サンクス共通（右上固定） */
+/* Kepty English — 表紙は上段行、サンクスは右上固定 */
 .brand-badge {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 2;
   margin: 0;
   font-size: 0.62rem;
   font-weight: 800;
@@ -144,8 +142,15 @@ h1 {
 }
 
 .brand-badge--intro {
+  position: static;
+  flex-shrink: 0;
+}
+
+.brand-badge--thanks {
+  position: absolute;
   top: 0;
   right: 0;
+  z-index: 2;
 }
 
 .intro__card {
@@ -788,11 +793,6 @@ h1 {
   padding: 0.35rem 0.15rem 2rem;
 }
 
-.brand-badge--thanks {
-  top: 0;
-  right: 0;
-}
-
 .screen-thanks__text {
   margin: 3.65rem 0 0;
   font-size: 1.35rem;
@@ -867,8 +867,3 @@ h1 {
   font-size: 0.88rem;
 }
 
-@media (max-width: 640px) {
-  .intro__head-main {
-    padding-right: clamp(6.75rem, 32vw, 9rem);
-  }
-}
