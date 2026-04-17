@@ -137,8 +137,10 @@ let grammarAnswers = [];
 let grammarIndex = 0;
 let speakingTopicCount = 0;
 
-const SESSION_KEY = "kepty-measurement-session-v2";
+const SESSION_KEY = "kepty-measurement-session-v3";
 let restoringSession = false;
+/** loadData 完了・restore 前に persist すると screen:intro で既存セッションを潰すため抑止する */
+let allowSessionPersist = false;
 
 function readStoredSession() {
   try {
@@ -151,8 +153,9 @@ function readStoredSession() {
 function getCurrentScreen() {
   const th = document.getElementById("screen-thanks");
   const flow = document.getElementById("test-flow");
-  if (th && !th.classList.contains("hidden")) return "thanks";
-  if (flow && !flow.classList.contains("hidden")) return "test";
+  // hidden 属性 / element.hidden が真実。class の .hidden だけだと属性と不整合で誤判定しうる
+  if (th && !th.hidden) return "thanks";
+  if (flow && !flow.hidden) return "test";
   return "intro";
 }
 
@@ -166,6 +169,7 @@ function collectVocabSnapshot() {
 
 function persistSessionState() {
   if (restoringSession) return;
+  if (!allowSessionPersist) return;
   try {
     saveCurrentGrammarSelection();
     const nameEl = document.getElementById("participant-name");
@@ -892,6 +896,7 @@ document.querySelectorAll("#test-flow .stepper__btn").forEach((btn) => {
 
 loadData()
   .then(() => {
+    allowSessionPersist = true;
     restoreSessionState();
     const nameEl = document.getElementById("participant-name");
     const vocabRoot = document.getElementById("vocab-root");
@@ -901,3 +906,6 @@ loadData()
   .catch((e) => console.error(e));
 
 window.addEventListener("pagehide", persistSessionState);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") persistSessionState();
+});
