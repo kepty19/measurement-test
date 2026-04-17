@@ -120,4 +120,37 @@
         <footer class="footer-nav" id="footer-nav">
           <p class="footer-nav__error" id="footer-error" role="alert" hidden></p>
           <div class="footer-nav__actions">
-            <button type="button" class="btn btn--ghost btn--footer" id="btn-prev" disabled>前に戻る
+            <button type="button" class="btn btn--ghost btn--footer" id="btn-prev" disabled>前に戻る</button>
+            <button type="button" class="btn btn--primary btn--footer-primary" id="btn-next">次へ進む</button>
+          </div>
+        </footer>
+      </div>
+
+      <section id="screen-thanks" class="screen-thanks hidden" hidden>
+        <p class="screen-thanks__text">現状把握テスト、お疲れ様でした！</p>
+      </section>
+    </div>
+
+    <div id="incomplete-modal" class="modal" hidden role="presentation">
+      <div class="modal__backdrop" data-modal-dismiss tabindex="-1" aria-hidden="true"></div>
+      <div
+        class="modal__dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="incomplete-modal-title"
+        aria-describedby="incomplete-modal-message"
+      >
+        <h2 id="incomplete-modal-title" class="modal__title">確認</h2>
+        <p id="incomplete-modal-message" class="modal__message"></p>
+        <div class="modal__actions">
+          <button type="button" class="btn btn--ghost modal__btn" id="incomplete-modal-cancel">キャンセル</button>
+          <button type="button" class="btn btn--primary modal__btn" id="incomplete-modal-ok">はい、進む</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="config.js?v=20260417-4"></script>
+    <script src="app.js?v=20260417-4" defer></script>
+  </body>
+</html>
