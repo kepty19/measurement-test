@@ -55,6 +55,37 @@ h1 {
 
 .intro {
   max-width: 100%;
+  min-height: min(70vh, 560px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 0 2rem;
+}
+
+.intro__shell {
+  width: 100%;
+  max-width: 480px;
+  position: relative;
+  padding: 2rem 2rem 2.25rem;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid #f0ebe5;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 24px 48px -12px rgba(28, 25, 23, 0.12),
+    0 0 0 1px rgba(194, 65, 12, 0.06);
+}
+
+.intro__shell::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 4px;
+  border-radius: 16px 16px 0 0;
+  background: linear-gradient(90deg, var(--accent) 0%, #ea580c 45%, #fdba74 100%);
+  opacity: 0.95;
 }
 
 .intro__head {
@@ -62,7 +93,7 @@ h1 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 1.5rem;
 }
 
 .intro__head-main {
@@ -70,20 +101,39 @@ h1 {
   min-width: 0;
 }
 
+.intro__head-main h1 {
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+  margin: 0 0 0.5rem;
+}
+
 .intro__brand {
   margin: 0;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--accent-text);
   white-space: nowrap;
   flex-shrink: 0;
-  padding-top: 0.15rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid rgba(194, 65, 12, 0.15);
 }
 
 .intro__card {
-  margin-top: 0.75rem;
-  max-width: 520px;
+  margin-top: 0;
+  max-width: none;
+}
+
+.intro .lead {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--muted);
+  max-width: none;
 }
 
 .header--test {
@@ -99,28 +149,34 @@ h1 {
 
 .intro__input {
   width: 100%;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
   font: inherit;
   font-size: 1rem;
+  background: #fafaf9;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
 .intro__input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 0;
-  border-color: var(--accent);
-}
-
-.intro__hint {
-  margin: 0.65rem 0 1rem;
-  font-size: 0.82rem;
-  color: var(--muted);
+  outline: none;
+  border-color: rgba(194, 65, 12, 0.45);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.12);
 }
 
 .intro__start {
   width: 100%;
-  padding: 0.75rem 1rem;
+  padding: 0.85rem 1rem;
+  margin-top: 1.25rem;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 8px rgba(194, 65, 12, 0.25);
+}
+
+.intro__start:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(194, 65, 12, 0.3);
 }
 
 .intro__error {
@@ -198,7 +254,7 @@ h1 {
 }
 
 .stepper__label {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
   text-align: center;
   line-height: 1.25;
@@ -308,12 +364,6 @@ h1 {
   margin: 0 0 0.35rem;
 }
 
-.vocab__meta {
-  font-size: 0.8rem;
-  color: var(--muted);
-  margin: 0 0 0.75rem;
-}
-
 .vocab__label {
   display: block;
   font-size: 0.85rem;
@@ -334,9 +384,9 @@ h1 {
 }
 
 .vocab__input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 0;
-  border-color: var(--accent);
+  outline: none;
+  border-color: rgba(194, 65, 12, 0.45);
+  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.1);
 }
 
 /* Grammar */
@@ -361,6 +411,17 @@ h1 {
   border-radius: var(--radius);
   padding: 1.25rem 1.35rem;
   box-shadow: var(--shadow);
+}
+
+.grammar__inline-error {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #b91c1c;
+  background: #fef2f2;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
 }
 
 .grammar__question {
@@ -463,6 +524,10 @@ h1 {
   margin-top: 1.25rem;
 }
 
+.speaking:not(.hidden) {
+  margin-top: 1rem;
+}
+
 /* Footer */
 .footer-nav {
   position: fixed;
@@ -486,6 +551,11 @@ h1 {
   font-size: 0.82rem;
   color: var(--muted);
   font-weight: 500;
+}
+
+.footer-nav__hint--error {
+  color: #b91c1c;
+  font-weight: 600;
 }
 
 .btn {

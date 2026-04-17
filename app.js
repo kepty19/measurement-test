@@ -130,9 +130,9 @@ function vocabIsCorrect(userText, expectedJa) {
 }
 
 const HINTS = [
-  'パート 1「単語」を実施中',
-  'パート 2「文法」を実施中',
-  'パート 3「スピーキング」を実施中',
+  'パート 1「単語テスト」を実施中',
+  'パート 2「文法テスト」を実施中',
+  'パート 3「スピーキングテスト」を実施中',
 ];
 
 let participantName = "";
@@ -159,7 +159,33 @@ function setStep(n) {
   document.getElementById("btn-next").textContent = isLast
     ? "①②の結果を送信し、スピーキングへ進む"
     : "次へ進む";
-  document.getElementById("footer-hint").textContent = HINTS[currentStep];
+  const fh = document.getElementById("footer-hint");
+  fh.textContent = HINTS[currentStep];
+  fh.classList.remove("footer-nav__hint--error");
+}
+
+function validateVocabComplete() {
+  const areas = document.querySelectorAll("#vocab-root .vocab__input");
+  if (!areas.length) return false;
+  for (let i = 0; i < areas.length; i++) {
+    if (!(areas[i].value || "").trim()) return false;
+  }
+  return true;
+}
+
+function validateGrammarComplete() {
+  saveCurrentGrammarSelection();
+  if (!grammarRows.length) return false;
+  return (
+    grammarAnswers.length === grammarRows.length &&
+    grammarAnswers.every((a) => a != null && String(a).trim() !== "")
+  );
+}
+
+function showFooterError(msg) {
+  const el = document.getElementById("footer-hint");
+  el.textContent = msg;
+  el.classList.add("footer-nav__hint--error");
 }
 
 function saveCurrentGrammarSelection() {
@@ -174,16 +200,14 @@ function renderVocabulary(rows) {
   let n = 0;
   rows.forEach((row) => {
     const en = (row.english || "").trim();
-    const level = (row.level || "").trim();
     if (!en) return;
     const id = `vocab-${n++}`;
     const item = document.createElement("article");
     item.className = "vocab__item";
     item.innerHTML = `
       <p class="vocab__prompt">${escapeHtml(en)}</p>
-      ${level ? `<p class="vocab__meta">${escapeHtml(level)}</p>` : ""}
       <label class="vocab__label" for="${id}">日本語の意味を入力</label>
-      <textarea id="${id}" class="vocab__input" rows="2" autocomplete="off" spellcheck="false" placeholder="例：パン"></textarea>
+      <textarea id="${id}" class="vocab__input" rows="2" autocomplete="off" spellcheck="false" placeholder="例：サッカー"></textarea>
     `;
     root.appendChild(item);
   });
@@ -211,6 +235,7 @@ function buildGrammarCard() {
       <span class="grammar__progress">問題 ${grammarIndex + 1} / ${grammarRows.length}</span>
     </div>
     <div class="grammar__card">
+      <p class="grammar__inline-error" id="grammar-inline-error" role="alert" hidden>選択肢を1つ選んでから次の問題へ進んでください。</p>
       <p class="grammar__question">${escapeHtml(q)}</p>
       <div class="grammar__options" role="radiogroup" aria-label="選択肢">
         ${options
@@ -237,6 +262,8 @@ function buildGrammarCard() {
   root.querySelectorAll('input[name="gopt"]').forEach((inp) => {
     inp.addEventListener("change", () => {
       grammarAnswers[grammarIndex] = inp.value;
+      const err = document.getElementById("grammar-inline-error");
+      if (err) err.hidden = true;
     });
   });
 
@@ -254,7 +281,13 @@ function buildGrammarCard() {
   const nextBtn = document.getElementById("grammar-next");
   if (nextBtn) {
     nextBtn.addEventListener("click", () => {
-      saveCurrentGrammarSelection();
+      const sel = root.querySelector('input[name="gopt"]:checked');
+      if (!sel) {
+        const err = document.getElementById("grammar-inline-error");
+        if (err) err.hidden = false;
+        return;
+      }
+      grammarAnswers[grammarIndex] = sel.value;
       if (grammarIndex < grammarRows.length - 1) {
         grammarIndex += 1;
         buildGrammarCard();
@@ -319,7 +352,7 @@ function themeFromRow(row) {
 function renderSpeaking(rows) {
   const root = document.getElementById("speaking-root");
   root.innerHTML = "";
-  const dataRows = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0);
+  const dataRows = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0).slice(0, 2);
   speakingTopicCount = dataRows.length;
   dataRows.forEach((row, i) => {
     const text = trainingTopicFromRow(row).replace(/\r\n/g, "\n").trim();
@@ -470,6 +503,17 @@ async function submitResults() {
 }
 
 async function fetchSpeakingRows() {
+  /** CSV はシート上の行順（2行目→3行目）を保ちやすいので優先する */
+  try {
+    const sCsv = await fetchCsv(GVIZ("Speaking"));
+    const sParsed = parseCsv(sCsv);
+    const fromCsv = (sParsed.data || []).filter((r) => trainingTopicFromRow(r).trim().length > 0);
+    if (fromCsv.length >= 2) return fromCsv.slice(0, 2);
+    if (fromCsv.length === 1) return fromCsv;
+  } catch (e) {
+    console.warn(e);
+  }
+
   const queries = [
     "SELECT * WHERE Col3 IS NOT NULL",
     "SELECT A, B, C WHERE Col3 IS NOT NULL",
@@ -480,22 +524,21 @@ async function fetchSpeakingRows() {
       const text = await fetchCsv(speakingGvizUrlWithQuery(tq));
       const rows = parseGvizJson(text);
       const withTopic = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0);
-      if (withTopic.length >= 2) return withTopic;
+      if (withTopic.length >= 2) return withTopic.slice(0, 2);
     } catch (e) {
       console.warn(e);
     }
   }
   try {
     const plain = await fetchCsv(GVIZ_JSON("Speaking"));
-    let rows = parseGvizJson(plain);
-    let withTopic = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0);
-    if (withTopic.length >= 2) return withTopic;
+    const rows = parseGvizJson(plain);
+    const withTopic = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0);
+    if (withTopic.length >= 2) return withTopic.slice(0, 2);
+    return withTopic;
   } catch (e) {
     console.warn(e);
   }
-  const sCsv = await fetchCsv(GVIZ("Speaking"));
-  const sParsed = parseCsv(sCsv);
-  return sParsed.data || [];
+  return [];
 }
 
 async function loadData() {
@@ -567,15 +610,48 @@ document.getElementById("btn-prev").addEventListener("click", () => {
 });
 document.getElementById("btn-next").addEventListener("click", () => {
   if (currentStep === 1) saveCurrentGrammarSelection();
-  if (currentStep < 2) setStep(currentStep + 1);
-  else submitResults();
+  if (currentStep < 2) {
+    if (currentStep === 0) {
+      if (!validateVocabComplete()) {
+        showFooterError("すべての単語に回答を入力してから次へ進んでください。");
+        return;
+      }
+    }
+    if (currentStep === 1) {
+      if (!validateGrammarComplete()) {
+        showFooterError("すべての文法問題に回答してから次へ進んでください。");
+        return;
+      }
+    }
+    setStep(currentStep + 1);
+    return;
+  }
+  submitResults();
 });
 
 document.querySelectorAll("#test-flow .stepper__btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     if (currentStep === 1) saveCurrentGrammarSelection();
     const go = Number(btn.getAttribute("data-go"));
-    if (!Number.isNaN(go)) setStep(go);
+    if (Number.isNaN(go)) return;
+    if (go < currentStep) {
+      setStep(go);
+      return;
+    }
+    if (go === currentStep) return;
+    if (go >= 1) {
+      if (!validateVocabComplete()) {
+        showFooterError("すべての単語に回答を入力してからお進みください。");
+        return;
+      }
+    }
+    if (go >= 2) {
+      if (!validateGrammarComplete()) {
+        showFooterError("すべての文法問題に回答してからお進みください。");
+        return;
+      }
+    }
+    setStep(go);
   });
 });
 
