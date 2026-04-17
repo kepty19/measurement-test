@@ -583,11 +583,10 @@ async function submitResults() {
   const payload = buildPayload();
   const btn = document.getElementById("btn-next");
   btn.disabled = true;
+  showThankYou();
 
   if (!SUBMIT_URL || !SUBMIT_URL.trim()) {
     downloadPayload(payload);
-    showThankYou();
-    btn.disabled = false;
     return;
   }
 
@@ -611,9 +610,6 @@ async function submitResults() {
   } catch (e) {
     console.error(e);
     downloadPayload(payload);
-  } finally {
-    btn.disabled = false;
-    showThankYou();
   }
 }
 
