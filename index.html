@@ -7,13 +7,55 @@
     <meta http-equiv="Cache-Control" content="no-cache" />
     <meta http-equiv="Pragma" content="no-cache" />
     <title>現状把握テスト | Kepty English</title>
+    <!-- 初回描画より前に data-shell を付け、表紙の一瞬表示を防ぐ（app.js の SESSION_KEY と同期） -->
+    <style>
+      html[data-shell="test"] #intro {
+        display: none !important;
+      }
+      html[data-shell="test"] #test-flow.hidden,
+      html[data-shell="test"] #test-flow[hidden] {
+        display: block !important;
+      }
+      html[data-shell="thanks"] #intro,
+      html[data-shell="thanks"] #test-flow {
+        display: none !important;
+      }
+      html[data-shell="thanks"] #screen-thanks.hidden,
+      html[data-shell="thanks"] #screen-thanks[hidden] {
+        display: flex !important;
+      }
+    </style>
+    <script>
+      (function () {
+        try {
+          var KEY = "kepty-measurement-session-v3";
+          var raw = sessionStorage.getItem(KEY) || localStorage.getItem(KEY);
+          if (!raw) {
+            document.documentElement.setAttribute("data-shell", "intro");
+            return;
+          }
+          var s = JSON.parse(raw);
+          if (s.v !== 1) {
+            document.documentElement.setAttribute("data-shell", "intro");
+            return;
+          }
+          if (s.screen === "test" || s.screen === "thanks") {
+            document.documentElement.setAttribute("data-shell", s.screen);
+          } else {
+            document.documentElement.setAttribute("data-shell", "intro");
+          }
+        } catch (e) {
+          document.documentElement.setAttribute("data-shell", "intro");
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20260417-10" />
+    <link rel="stylesheet" href="styles.css?v=20260417-11" />
   </head>
   <body>
     <div class="app">
@@ -154,7 +196,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-    <script src="config.js?v=20260417-10"></script>
-    <script src="app.js?v=20260417-10" defer></script>
+    <script src="config.js?v=20260417-11"></script>
+    <script src="app.js?v=20260417-11" defer></script>
   </body>
 </html>

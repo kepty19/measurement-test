@@ -898,6 +898,7 @@ loadData()
   .then(() => {
     allowSessionPersist = true;
     restoreSessionState();
+    document.documentElement.removeAttribute("data-shell");
     const nameEl = document.getElementById("participant-name");
     const vocabRoot = document.getElementById("vocab-root");
     if (nameEl) nameEl.addEventListener("input", persistSessionState);
