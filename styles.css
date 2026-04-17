@@ -795,7 +795,7 @@ h1 {
 
 .screen-thanks__text {
   margin: 0;
-  font-size: calc(1.35rem * 0.75);
+  font-size: calc(1.35rem * 0.75 * 0.75);
   font-weight: 600;
   letter-spacing: 0.02em;
   text-align: center;

@@ -137,14 +137,22 @@ let grammarAnswers = [];
 let grammarIndex = 0;
 let speakingTopicCount = 0;
 
-const SESSION_KEY = "kepty-measurement-session-v1";
+const SESSION_KEY = "kepty-measurement-session-v2";
 let restoringSession = false;
+
+function readStoredSession() {
+  try {
+    return sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
 
 function getCurrentScreen() {
   const th = document.getElementById("screen-thanks");
   const flow = document.getElementById("test-flow");
-  if (th && !th.hasAttribute("hidden")) return "thanks";
-  if (flow && !flow.hasAttribute("hidden")) return "test";
+  if (th && !th.classList.contains("hidden")) return "thanks";
+  if (flow && !flow.classList.contains("hidden")) return "test";
   return "intro";
 }
 
@@ -171,7 +179,13 @@ function persistSessionState() {
       grammarAnswers: grammarAnswers.slice(),
       vocabAnswers: collectVocabSnapshot(),
     };
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+    const str = JSON.stringify(payload);
+    sessionStorage.setItem(SESSION_KEY, str);
+    try {
+      localStorage.setItem(SESSION_KEY, str);
+    } catch (e2) {
+      console.warn(e2);
+    }
   } catch (e) {
     console.warn(e);
   }
@@ -179,8 +193,9 @@ function persistSessionState() {
 
 function restoreSessionState() {
   restoringSession = true;
+  let shouldPersistAfter = false;
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
+    const raw = readStoredSession();
     if (!raw) return;
     const s = JSON.parse(raw);
     if (s.v !== 1) return;
@@ -192,6 +207,7 @@ function restoreSessionState() {
         const pd = document.getElementById("participant-display");
         if (pd) pd.textContent = `実施者：${participantName}`;
       }
+      shouldPersistAfter = true;
       return;
     }
 
@@ -223,25 +239,29 @@ function restoreSessionState() {
         }
       }
 
-      document.getElementById("intro").classList.add("hidden");
-      document.getElementById("intro").setAttribute("hidden", "");
+      const introEl = document.getElementById("intro");
+      introEl.classList.add("hidden");
+      introEl.setAttribute("hidden", "");
       const flow = document.getElementById("test-flow");
       flow.classList.remove("hidden");
       flow.removeAttribute("hidden");
+      flow.hidden = false;
       const step = typeof s.currentStep === "number" ? s.currentStep : 0;
       setStep(Math.max(0, Math.min(2, step)));
+      shouldPersistAfter = true;
       return;
     }
 
     if (s.screen === "intro" && typeof s.nameDraft === "string") {
-      const nameInput = document.getElementById("participant-name");
-      if (nameInput) nameInput.value = s.nameDraft;
+      const ni = document.getElementById("participant-name");
+      if (ni) ni.value = s.nameDraft;
+      shouldPersistAfter = true;
     }
   } catch (e) {
     console.warn(e);
   } finally {
     restoringSession = false;
-    persistSessionState();
+    if (shouldPersistAfter) persistSessionState();
   }
 }
 
@@ -672,11 +692,14 @@ function buildPayload() {
 function showThankYou() {
   document.getElementById("intro").classList.add("hidden");
   document.getElementById("intro").setAttribute("hidden", "");
-  document.getElementById("test-flow").classList.add("hidden");
-  document.getElementById("test-flow").setAttribute("hidden", "");
+  const tf = document.getElementById("test-flow");
+  tf.classList.add("hidden");
+  tf.setAttribute("hidden", "");
+  tf.hidden = true;
   const th = document.getElementById("screen-thanks");
   th.classList.remove("hidden");
   th.removeAttribute("hidden");
+  th.hidden = false;
   persistSessionState();
 }
 
@@ -832,6 +855,7 @@ function startTest() {
   const flow = document.getElementById("test-flow");
   flow.classList.remove("hidden");
   flow.removeAttribute("hidden");
+  flow.hidden = false;
   setStep(0);
 }
 
