@@ -1,15 +1,17 @@
 :root {
-  --bg: #f4f6fb;
+  /* Premium muted orange (Kepty-style) */
+  --bg: #faf6f3;
   --surface: #ffffff;
-  --text: #1a1d26;
-  --muted: #5c6478;
-  --border: #e2e6f0;
-  --accent: #2563eb;
-  --accent-soft: #dbeafe;
-  --accent-text: #1e40af;
-  --success: #059669;
+  --text: #1c1917;
+  --muted: #78716c;
+  --border: #e7ddd4;
+  --accent: #c2410c;
+  --accent-hover: #9a3412;
+  --accent-soft: #ffedd5;
+  --accent-text: #9a3412;
+  --success: #047857;
   --radius: 12px;
-  --shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+  --shadow: 0 8px 30px rgba(28, 25, 23, 0.08);
   font-family: "Noto Sans JP", system-ui, sans-serif;
 }
 
@@ -35,15 +37,6 @@ body {
 
 .header {
   margin-bottom: 1.75rem;
-}
-
-.eyebrow {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin: 0 0 0.35rem;
 }
 
 h1 {
@@ -163,7 +156,7 @@ h1 {
 }
 
 .stepper__btn:hover {
-  border-color: #c7d2fe;
+  border-color: #fdba74;
   color: var(--text);
 }
 
@@ -280,7 +273,7 @@ h1 {
   border-radius: var(--radius);
   padding: 1.1rem 1.25rem;
   margin-bottom: 1rem;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 2px 8px rgba(28, 25, 23, 0.04);
 }
 
 .vocab__prompt {
@@ -385,17 +378,6 @@ h1 {
   line-height: 1.65;
 }
 
-.grammar__tag {
-  display: inline-block;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--accent-text);
-  background: var(--accent-soft);
-  padding: 0.15rem 0.45rem;
-  border-radius: 6px;
-  margin-bottom: 0.5rem;
-}
-
 .grammar__options {
   display: flex;
   flex-direction: column;
@@ -434,6 +416,10 @@ h1 {
   gap: 0.75rem;
 }
 
+.grammar__nav--end-only {
+  justify-content: flex-start;
+}
+
 /* Speaking */
 .speaking__topic {
   background: var(--surface);
@@ -441,7 +427,7 @@ h1 {
   border-radius: var(--radius);
   padding: 1.15rem 1.25rem;
   margin-bottom: 1rem;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 2px 8px rgba(28, 25, 23, 0.04);
 }
 
 .speaking__label {
@@ -457,21 +443,6 @@ h1 {
   font-size: 0.95rem;
   line-height: 1.65;
   white-space: pre-wrap;
-}
-
-.speaking__done {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  margin-top: 0.85rem;
-  font-size: 0.88rem;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.speaking__checkbox {
-  margin-top: 0.2rem;
-  accent-color: var(--accent);
 }
 
 .card {
@@ -494,12 +465,6 @@ h1 {
 
 .speaking-guide__steps li {
   margin-bottom: 0.5rem;
-}
-
-.note {
-  margin: 1rem 0 0;
-  font-size: 0.82rem;
-  color: var(--muted);
 }
 
 .speaking-guide {
@@ -549,7 +514,7 @@ h1 {
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--accent-hover);
 }
 
 .btn--ghost {
@@ -560,7 +525,7 @@ h1 {
 
 .btn--ghost:hover:not(:disabled) {
   color: var(--text);
-  border-color: #cbd5e1;
+  border-color: #d6d3d1;
 }
 
 .btn:disabled {

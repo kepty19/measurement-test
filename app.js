@@ -3,6 +3,10 @@ const GVIZ = (sheet) =>
   `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
     sheet
   )}`;
+const GVIZ_JSON = (sheet) =>
+  `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(
+    sheet
+  )}`;
 
 const SUBMIT_URL = typeof window.SUBMIT_URL !== "undefined" ? window.SUBMIT_URL : "";
 const SUBMIT_SECRET = typeof window.SUBMIT_SECRET !== "undefined" ? window.SUBMIT_SECRET : "";
@@ -38,6 +42,13 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * 単語の正解判定ロジック（概要）
+ * 1) NFKC 正規化・前後空白除去・連続空白を1つにまとめる（英数字は全半統一）
+ * 2) 完全一致（正解文全体、または / ・ 、 などで区切った別表記のいずれか）
+ * 3) 別表記セグメントや全文について、表記ゆれを許容した「含む」一致（短すぎる1文字のみは除外）
+ * 4) レーベンシュタイン距離に基づく類似度が一定以上なら正解（短い語句向け）
+ */
 function normalizeJa(s) {
   return String(s)
     .normalize("NFKC")
@@ -45,16 +56,70 @@ function normalizeJa(s) {
     .replace(/\s+/g, "");
 }
 
+function stripNoise(s) {
+  return normalizeJa(s).replace(/[・。．、，,.．\s（）()「」『』]/g, "");
+}
+
+function splitAnswerVariants(expectedJa) {
+  return String(expectedJa)
+    .split(/[/／、,，|｜\n]/)
+    .map((p) => normalizeJa(p.trim()))
+    .filter((p) => p.length > 0);
+}
+
+function levenshtein(a, b) {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[m][n];
+}
+
+function similarityRatio(a, b) {
+  if (!a.length || !b.length) return 0;
+  const d = levenshtein(a, b);
+  return 1 - d / Math.max(a.length, b.length);
+}
+
 function vocabIsCorrect(userText, expectedJa) {
   const u = normalizeJa(userText);
   if (!u) return false;
   const full = normalizeJa(expectedJa);
+  const uPlain = stripNoise(userText);
+  const fullPlain = stripNoise(expectedJa);
+
   if (full && u === full) return true;
-  const parts = String(expectedJa)
-    .split(/[/／、,，|｜]/)
-    .map((p) => normalizeJa(p))
-    .filter(Boolean);
-  return parts.some((p) => p && u === p);
+  if (fullPlain && uPlain === fullPlain) return true;
+
+  const parts = splitAnswerVariants(expectedJa);
+  if (parts.some((p) => p && u === p)) return true;
+  if (parts.some((p) => p && stripNoise(p) && uPlain === stripNoise(p))) return true;
+
+  const minSub = 2;
+  if (full.length >= minSub && (u.includes(full) || full.includes(u))) return true;
+  if (fullPlain.length >= minSub && (uPlain.includes(fullPlain) || fullPlain.includes(uPlain))) return true;
+
+  for (const p of parts) {
+    if (!p || p.length < minSub) continue;
+    if (u.includes(p) || p.includes(u)) return true;
+    const pp = stripNoise(p);
+    if (pp.length >= minSub && (uPlain.includes(pp) || pp.includes(uPlain))) return true;
+    if (similarityRatio(u, p) >= 0.78) return true;
+    if (pp.length >= 3 && similarityRatio(uPlain, pp) >= 0.78) return true;
+  }
+  if (full.length >= 3 && similarityRatio(u, full) >= 0.78) return true;
+  if (fullPlain.length >= 3 && similarityRatio(uPlain, fullPlain) >= 0.78) return true;
+
+  return false;
 }
 
 const HINTS = [
@@ -84,7 +149,7 @@ function setStep(n) {
   });
   document.getElementById("btn-prev").disabled = currentStep === 0;
   const isLast = currentStep === 2;
-  document.getElementById("btn-next").textContent = isLast ? "結果を送信" : "次のパート";
+  document.getElementById("btn-next").textContent = isLast ? "結果を送信" : "次へ進む";
   document.getElementById("footer-hint").textContent = HINTS[currentStep];
 }
 
@@ -141,14 +206,13 @@ function buildGrammarCard() {
     (row.option4 || "").trim(),
   ].filter(Boolean);
   const options = shuffle([correct, ...wrong].filter((x) => x.length > 0));
-  const tag = (row["No."] || "").trim();
+  const isLastQ = grammarIndex >= grammarRows.length - 1;
 
   root.innerHTML = `
     <div class="grammar__toolbar">
       <span class="grammar__progress">問題 ${grammarIndex + 1} / ${grammarRows.length}</span>
     </div>
     <div class="grammar__card">
-      ${tag ? `<span class="grammar__tag">${escapeHtml(tag)}</span>` : ""}
       <p class="grammar__question">${escapeHtml(q)}</p>
       <div class="grammar__options" role="radiogroup" aria-label="選択肢">
         ${options
@@ -161,11 +225,13 @@ function buildGrammarCard() {
           )
           .join("")}
       </div>
-      <div class="grammar__nav">
+      <div class="grammar__nav ${isLastQ ? "grammar__nav--end-only" : ""}">
         <button type="button" class="btn btn--ghost" id="grammar-prev" ${grammarIndex === 0 ? "disabled" : ""}>前の問題</button>
-        <button type="button" class="btn btn--primary" id="grammar-next">${
-          grammarIndex >= grammarRows.length - 1 ? "このパートの最後の問題" : "次の問題"
-        }</button>
+        ${
+          isLastQ
+            ? ""
+            : `<button type="button" class="btn btn--primary" id="grammar-next">次の問題</button>`
+        }
       </div>
     </div>
   `;
@@ -187,21 +253,69 @@ function buildGrammarCard() {
     grammarIndex = Math.max(0, grammarIndex - 1);
     buildGrammarCard();
   });
-  document.getElementById("grammar-next").addEventListener("click", () => {
-    saveCurrentGrammarSelection();
-    if (grammarIndex < grammarRows.length - 1) {
-      grammarIndex += 1;
-      buildGrammarCard();
-    }
-  });
+  const nextBtn = document.getElementById("grammar-next");
+  if (nextBtn) {
+    nextBtn.addEventListener("click", () => {
+      saveCurrentGrammarSelection();
+      if (grammarIndex < grammarRows.length - 1) {
+        grammarIndex += 1;
+        buildGrammarCard();
+      }
+    });
+  }
 }
 
 function trainingTopicFromRow(row) {
   if (!row || typeof row !== "object") return "";
+  const keys = Object.keys(row);
+  for (const k of keys) {
+    if (k.replace(/\s+/g, " ").trim().toLowerCase() === "training topic") {
+      const v = row[k];
+      if (v != null && String(v).trim()) return String(v);
+    }
+  }
   const direct = row["training topic"] ?? row["training topic "] ?? row["Training topic"];
   if (direct != null && String(direct).trim()) return String(direct);
-  const hit = Object.entries(row).find(([k]) => k.replace(/\s+/g, " ").trim() === "training topic");
-  return hit ? String(hit[1]) : "";
+  return "";
+}
+
+/** Google Visualization API の JSON（setResponse）をパースして行オブジェクトの配列にする */
+function parseGvizJson(text) {
+  const marker = "setResponse(";
+  const start = text.indexOf(marker);
+  if (start < 0) return [];
+  const jsonStart = start + marker.length;
+  const end = text.lastIndexOf(");");
+  if (end <= jsonStart) return [];
+  let payload;
+  try {
+    payload = JSON.parse(text.slice(jsonStart, end));
+  } catch {
+    return [];
+  }
+  if (payload.status !== "ok" || !payload.table) return [];
+  const cols = (payload.table.cols || []).map((c) => (c.label || "").trim());
+  const rows = payload.table.rows || [];
+  return rows.map((r) => {
+    const o = {};
+    (r.c || []).forEach((cell, i) => {
+      const label = cols[i] || `col${i}`;
+      let v = "";
+      if (cell) {
+        if (cell.v != null && cell.v !== "") v = String(cell.v);
+        else if (cell.f != null && cell.f !== "") v = String(cell.f);
+      }
+      o[label] = v;
+    });
+    return o;
+  });
+}
+
+function themeFromRow(row) {
+  if (!row || typeof row !== "object") return "";
+  const hit = Object.keys(row).find((k) => k.replace(/\s+/g, " ").trim().toLowerCase() === "theme");
+  if (hit) return String(row[hit] || "").trim();
+  return String(row.theme || "").trim();
 }
 
 function renderSpeaking(rows) {
@@ -211,16 +325,12 @@ function renderSpeaking(rows) {
   speakingTopicCount = dataRows.length;
   dataRows.forEach((row, i) => {
     const text = trainingTopicFromRow(row).replace(/\r\n/g, "\n").trim();
-    const theme = (row.theme || "").trim();
+    const theme = themeFromRow(row);
     const block = document.createElement("div");
     block.className = "speaking__topic";
     block.innerHTML = `
       <p class="speaking__label">トピック ${i + 1}${theme ? ` · ${escapeHtml(theme)}` : ""}</p>
       <p class="speaking__text">${escapeHtml(text)}</p>
-      <label class="speaking__done">
-        <input type="checkbox" id="speaking-done-${i}" class="speaking__checkbox" />
-        <span>このトピックについて、LINE で録音・提出しました</span>
-      </label>
     `;
     root.appendChild(block);
   });
@@ -265,13 +375,6 @@ function collectGrammarAnswers() {
   });
 }
 
-function collectSpeakingStatus() {
-  const checks = document.querySelectorAll("#speaking-root .speaking__checkbox");
-  const done = Array.from(checks).filter((c) => c.checked).length;
-  const target = speakingTopicCount || 2;
-  return { completed: done, target, checks: Array.from(checks).map((c) => c.checked) };
-}
-
 function ratePercent(correct, total) {
   if (!total) return 0;
   return Math.round((correct / total) * 10000) / 100;
@@ -280,14 +383,11 @@ function ratePercent(correct, total) {
 function buildPayload() {
   const vocabItems = collectVocabAnswers();
   const grammarItems = collectGrammarAnswers();
-  const speak = collectSpeakingStatus();
 
   const vCorrect = vocabItems.filter((x) => x.isCorrect).length;
   const vTotal = vocabItems.length;
   const gCorrect = grammarItems.filter((x) => x.isCorrect).length;
   const gTotal = grammarItems.length;
-  const target = speak.target || 2;
-  const sRate = ratePercent(speak.completed, target);
 
   const out = {
     name: participantName,
@@ -302,19 +402,10 @@ function buildPayload() {
         total: gTotal,
         ratePercent: ratePercent(gCorrect, gTotal),
       },
-      speaking: {
-        completed: speak.completed,
-        target,
-        ratePercent: sRate,
-      },
     },
     raw: {
       vocabulary: vocabItems,
       grammar: grammarItems,
-      speaking: {
-        topicCount: speakingTopicCount,
-        submittedPerTopic: speak.checks,
-      },
     },
   };
   if (SUBMIT_SECRET) out.secret = SUBMIT_SECRET;
@@ -372,7 +463,7 @@ async function submitResults() {
     if (!res.ok || data.ok === false) {
       throw new Error(data.error || text || `HTTP ${res.status}`);
     }
-    showToast("送信しました。スプレッドシートの「Results」「集計」をご確認ください。", false);
+    showToast("送信しました。スプレッドシートの「Result」「raw data」をご確認ください。", false);
   } catch (e) {
     console.error(e);
     downloadPayload(payload);
@@ -391,10 +482,10 @@ async function loadData() {
   const speakingStatus = document.getElementById("speaking-status");
 
   try {
-    const [vText, gText, sText] = await Promise.all([
+    const [vText, gText, sJsonText] = await Promise.all([
       fetchCsv(GVIZ("Vocabulary")),
       fetchCsv(GVIZ("Grammar")),
-      fetchCsv(GVIZ("Speaking")),
+      fetchCsv(GVIZ_JSON("Speaking")),
     ]);
 
     const vocabParsed = parseCsv(vText);
@@ -412,10 +503,15 @@ async function loadData() {
     grammarIndex = 0;
     buildGrammarCard();
 
-    const sParsed = parseCsv(sText);
+    let speakingRows = parseGvizJson(sJsonText);
+    if (!speakingRows.length) {
+      const sCsv = await fetchCsv(GVIZ("Speaking"));
+      const sParsed = parseCsv(sCsv);
+      speakingRows = sParsed.data || [];
+    }
     speakingStatus.classList.add("hidden");
     document.getElementById("speaking-root").classList.remove("hidden");
-    renderSpeaking(sParsed.data);
+    renderSpeaking(speakingRows);
   } catch (e) {
     console.error(e);
     const msg =

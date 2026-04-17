@@ -16,7 +16,6 @@
     <div class="app">
       <section id="intro" class="intro" aria-labelledby="intro-title">
         <header class="header">
-          <p class="eyebrow">英語学習アプリ利用前の診断</p>
           <h1 id="intro-title">現状把握テスト</h1>
           <p class="lead">まず<strong>実施者の氏名</strong>を入力してから、テストを開始してください。</p>
         </header>
@@ -30,7 +29,7 @@
             maxlength="120"
             placeholder="例：山田 太郎"
           />
-          <p class="intro__hint">送信された結果は氏名をキーに、スプレッドシートの「集計」シートに反映されます。</p>
+          <p class="intro__hint">送信された結果は氏名をキーに、スプレッドシートの「Result」「raw data」に記録されます。</p>
           <button type="button" class="btn btn--primary intro__start" id="btn-start">テストを開始</button>
           <p id="intro-error" class="intro__error" role="alert" hidden>氏名を入力してください。</p>
         </div>
@@ -38,11 +37,7 @@
 
       <div id="test-flow" class="test-flow hidden" hidden>
         <header class="header">
-          <p class="eyebrow">英語学習アプリ利用前の診断</p>
           <h1>現状把握テスト</h1>
-          <p class="lead">
-            3つのパート（単語・文法・スピーキング）です。今どのパートにいるかは、上部のステップで確認できます。
-          </p>
           <p class="participant-badge" id="participant-display" aria-live="polite"></p>
         </header>
 
@@ -75,7 +70,7 @@
               <span class="badge">パート 1 / 3</span>
               <h2 id="title-0">単語</h2>
               <p class="panel__desc">
-                英語の語句が表示されます。各問の下の入力欄に、意味を<strong>日本語で</strong>入力してください（選択式ではありません）。
+                英語の語句が表示されます。各問の下の入力欄に、意味を<strong>日本語で</strong>入力してください（選択式ではありません）。正解判定はスプレッドシートの和訳（C列の目安）と照合し、表記のゆれや一部一致も含めて合っていると判断できる場合は正解とします。
               </p>
             </div>
             <div id="vocab-status" class="status status--loading">問題を読み込み中です…</div>
@@ -97,7 +92,7 @@
               <span class="badge">パート 3 / 3</span>
               <h2 id="title-2">スピーキング</h2>
               <p class="panel__desc">
-                トピックは2件です。録音・提出は LINE で行います。実施後は下のチェックを入れてください（完了状況の記録用です）。
+                トピックは2件です。録音・提出は公式 LINE で行います（採点データは LINE 側で取得します）。
               </p>
             </div>
             <div id="speaking-status" class="status status--loading">トピックを読み込み中です…</div>
@@ -119,9 +114,9 @@
         </main>
 
         <footer class="footer-nav">
-          <button type="button" class="btn btn--ghost" id="btn-prev" disabled>前のパート</button>
+          <button type="button" class="btn btn--ghost" id="btn-prev" disabled>前に戻る</button>
           <div class="footer-nav__hint" id="footer-hint">パート 1「単語」を実施中</div>
-          <button type="button" class="btn btn--primary" id="btn-next">次のパート</button>
+          <button type="button" class="btn btn--primary" id="btn-next">次へ進む</button>
         </footer>
       </div>
 
