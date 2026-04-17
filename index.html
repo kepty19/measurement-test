@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>現状把握テスト | Kepty English</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <section id="intro" class="intro" aria-labelledby="intro-title">
+        <header class="header">
+          <p class="eyebrow">英語学習アプリ利用前の診断</p>
+          <h1 id="intro-title">現状把握テスト</h1>
+          <p class="lead">まず<strong>実施者の氏名</strong>を入力してから、テストを開始してください。</p>
+        </header>
+        <div class="intro__card card">
+          <label class="intro__label" for="participant-name">氏名（必須）</label>
+          <input
+            type="text"
+            id="participant-name"
+            class="intro__input"
+            autocomplete="name"
+            maxlength="120"
+            placeholder="例：山田 太郎"
+          />
+          <p class="intro__hint">送信された結果は氏名をキーに、スプレッドシートの「集計」シートに反映されます。</p>
+          <button type="button" class="btn btn--primary intro__start" id="btn-start">テストを開始</button>
+          <p id="intro-error" class="intro__error" role="alert" hidden>氏名を入力してください。</p>
+        </div>
+      </section>
+
+      <div id="test-flow" class="test-flow hidden" hidden>
+        <header class="header">
+          <p class="eyebrow">英語学習アプリ利用前の診断</p>
+          <h1>現状把握テスト</h1>
+          <p class="lead">
+            3つのパート（単語・文法・スピーキング）です。今どのパートにいるかは、上部のステップで確認できます。
+          </p>
+          <p class="participant-badge" id="participant-display" aria-live="polite"></p>
+        </header>
+
+        <nav class="stepper" aria-label="テストのパート">
+          <ol class="stepper__list">
+            <li class="stepper__item" data-step="0">
+              <button type="button" class="stepper__btn" data-go="0">
+                <span class="stepper__num">1</span>
+                <span class="stepper__label">単語</span>
+              </button>
+            </li>
+            <li class="stepper__item" data-step="1">
+              <button type="button" class="stepper__btn" data-go="1">
+                <span class="stepper__num">2</span>
+                <span class="stepper__label">文法</span>
+              </button>
+            </li>
+            <li class="stepper__item" data-step="2">
+              <button type="button" class="stepper__btn" data-go="2">
+                <span class="stepper__num">3</span>
+                <span class="stepper__label">スピーキング</span>
+              </button>
+            </li>
+          </ol>
+        </nav>
+
+        <main class="main">
+          <section id="panel-0" class="panel is-active" aria-labelledby="title-0">
+            <div class="panel__head">
+              <span class="badge">パート 1 / 3</span>
+              <h2 id="title-0">単語</h2>
+              <p class="panel__desc">
+                英語の語句が表示されます。各問の下の入力欄に、意味を<strong>日本語で</strong>入力してください（選択式ではありません）。
+              </p>
+            </div>
+            <div id="vocab-status" class="status status--loading">問題を読み込み中です…</div>
+            <div id="vocab-root" class="vocab hidden"></div>
+          </section>
+
+          <section id="panel-1" class="panel" aria-labelledby="title-1" hidden>
+            <div class="panel__head">
+              <span class="badge">パート 2 / 3</span>
+              <h2 id="title-1">文法</h2>
+              <p class="panel__desc">4つの選択肢から正しいものを1つ選んでください。</p>
+            </div>
+            <div id="grammar-status" class="status status--loading">問題を読み込み中です…</div>
+            <div id="grammar-root" class="grammar hidden"></div>
+          </section>
+
+          <section id="panel-2" class="panel" aria-labelledby="title-2" hidden>
+            <div class="panel__head">
+              <span class="badge">パート 3 / 3</span>
+              <h2 id="title-2">スピーキング</h2>
+              <p class="panel__desc">
+                トピックは2件です。録音・提出は LINE で行います。実施後は下のチェックを入れてください（完了状況の記録用です）。
+              </p>
+            </div>
+            <div id="speaking-status" class="status status--loading">トピックを読み込み中です…</div>
+            <div id="speaking-root" class="speaking hidden"></div>
+            <div class="card speaking-guide">
+              <h3 class="card__title">実施方法</h3>
+              <ol class="speaking-guide__steps">
+                <li>
+                  <strong>ステップ (1)</strong>：Kepty English の公式 LINE
+                  アカウントの音声マイク機能を活用して、スピーチ内容を録音・提出します。
+                </li>
+                <li>
+                  <strong>ステップ (2)</strong>：2 つのトピックテーマに対して、それぞれ<strong>約 30 秒</strong>（合計 2
+                  件）のスピーチを録音し、提出してください。
+                </li>
+              </ol>
+            </div>
+          </section>
+        </main>
+
+        <footer class="footer-nav">
+          <button type="button" class="btn btn--ghost" id="btn-prev" disabled>前のパート</button>
+          <div class="footer-nav__hint" id="footer-hint">パート 1「単語」を実施中</div>
+          <button type="button" class="btn btn--primary" id="btn-next">次のパート</button>
+        </footer>
+      </div>
+
+      <section id="submit-toast" class="toast hidden" role="status" aria-live="polite" hidden></section>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="config.js"></script>
+    <script src="app.js" defer></script>
+  </body>
+</html>

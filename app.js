@@ -1,0 +1,473 @@
+const SPREADSHEET_ID = "19GdI5qQWc-VyLQEgRiJfaxxTLwrtxU6ofx4tZYPax0M";
+const GVIZ = (sheet) =>
+  `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
+    sheet
+  )}`;
+
+const SUBMIT_URL = typeof window.SUBMIT_URL !== "undefined" ? window.SUBMIT_URL : "";
+const SUBMIT_SECRET = typeof window.SUBMIT_SECRET !== "undefined" ? window.SUBMIT_SECRET : "";
+
+function fetchCsv(url) {
+  return fetch(url).then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.text();
+  });
+}
+
+function parseCsv(text) {
+  return Papa.parse(text, {
+    header: true,
+    skipEmptyLines: "greedy",
+  });
+}
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function normalizeJa(s) {
+  return String(s)
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, "");
+}
+
+function vocabIsCorrect(userText, expectedJa) {
+  const u = normalizeJa(userText);
+  if (!u) return false;
+  const full = normalizeJa(expectedJa);
+  if (full && u === full) return true;
+  const parts = String(expectedJa)
+    .split(/[/／、,，|｜]/)
+    .map((p) => normalizeJa(p))
+    .filter(Boolean);
+  return parts.some((p) => p && u === p);
+}
+
+const HINTS = [
+  'パート 1「単語」を実施中',
+  'パート 2「文法」を実施中',
+  'パート 3「スピーキング」を実施中',
+];
+
+let participantName = "";
+let currentStep = 0;
+let vocabRows = [];
+let grammarRows = [];
+let grammarAnswers = [];
+let grammarIndex = 0;
+let speakingTopicCount = 0;
+
+function setStep(n) {
+  currentStep = Math.max(0, Math.min(2, n));
+  document.querySelectorAll("#test-flow .panel").forEach((el, i) => {
+    const active = i === currentStep;
+    el.classList.toggle("is-active", active);
+    el.hidden = !active;
+  });
+  document.querySelectorAll("#test-flow .stepper__item").forEach((el, i) => {
+    el.classList.toggle("is-current", i === currentStep);
+    el.classList.toggle("is-done", i < currentStep);
+  });
+  document.getElementById("btn-prev").disabled = currentStep === 0;
+  const isLast = currentStep === 2;
+  document.getElementById("btn-next").textContent = isLast ? "結果を送信" : "次のパート";
+  document.getElementById("footer-hint").textContent = HINTS[currentStep];
+}
+
+function saveCurrentGrammarSelection() {
+  const root = document.getElementById("grammar-root");
+  const sel = root.querySelector('input[name="gopt"]:checked');
+  if (sel) grammarAnswers[grammarIndex] = sel.value;
+}
+
+function renderVocabulary(rows) {
+  const root = document.getElementById("vocab-root");
+  root.innerHTML = "";
+  let n = 0;
+  rows.forEach((row) => {
+    const en = (row.english || "").trim();
+    const ja = (row.japanese || "").trim();
+    const level = (row.level || "").trim();
+    if (!en) return;
+    const id = `vocab-${n++}`;
+    const item = document.createElement("article");
+    item.className = "vocab__item";
+    item.innerHTML = `
+      <p class="vocab__prompt">${escapeHtml(en)}</p>
+      ${level ? `<p class="vocab__meta">${escapeHtml(level)}</p>` : ""}
+      <label class="vocab__label" for="${id}">日本語の意味を入力</label>
+      <textarea id="${id}" class="vocab__input" rows="2" autocomplete="off" spellcheck="false" placeholder="例：パン"></textarea>
+      <div class="vocab__check">
+        <button type="button" class="btn--small vocab__reveal">答え合わせ（正解の目安を表示）</button>
+        <p class="vocab__answer" role="status"></p>
+      </div>
+    `;
+    const btn = item.querySelector(".vocab__reveal");
+    const ans = item.querySelector(".vocab__answer");
+    btn.addEventListener("click", () => {
+      ans.textContent = ja ? `目安：${ja}` : "（スプレッドシートに正解がありません）";
+      ans.classList.add("is-visible");
+    });
+    root.appendChild(item);
+  });
+}
+
+function buildGrammarCard() {
+  const root = document.getElementById("grammar-root");
+  if (!grammarRows.length) {
+    root.innerHTML = '<p class="status status--error">文法の問題が見つかりませんでした。</p>';
+    return;
+  }
+  const row = grammarRows[grammarIndex];
+  const q = (row.question || "").trim();
+  const correct = (row.answer || "").trim();
+  const wrong = [
+    (row.option2 || "").trim(),
+    (row.option3 || "").trim(),
+    (row.option4 || "").trim(),
+  ].filter(Boolean);
+  const options = shuffle([correct, ...wrong].filter((x) => x.length > 0));
+  const tag = (row["No."] || "").trim();
+
+  root.innerHTML = `
+    <div class="grammar__toolbar">
+      <span class="grammar__progress">問題 ${grammarIndex + 1} / ${grammarRows.length}</span>
+    </div>
+    <div class="grammar__card">
+      ${tag ? `<span class="grammar__tag">${escapeHtml(tag)}</span>` : ""}
+      <p class="grammar__question">${escapeHtml(q)}</p>
+      <div class="grammar__options" role="radiogroup" aria-label="選択肢">
+        ${options
+          .map(
+            (opt) => `
+          <label class="grammar__option">
+            <input type="radio" name="gopt" value="${escapeHtml(opt)}" />
+            <span>${escapeHtml(opt)}</span>
+          </label>`
+          )
+          .join("")}
+      </div>
+      <div class="grammar__nav">
+        <button type="button" class="btn btn--ghost" id="grammar-prev" ${grammarIndex === 0 ? "disabled" : ""}>前の問題</button>
+        <button type="button" class="btn btn--primary" id="grammar-next">${
+          grammarIndex >= grammarRows.length - 1 ? "このパートの最後の問題" : "次の問題"
+        }</button>
+      </div>
+    </div>
+  `;
+
+  root.querySelectorAll('input[name="gopt"]').forEach((inp) => {
+    inp.addEventListener("change", () => {
+      grammarAnswers[grammarIndex] = inp.value;
+    });
+  });
+
+  const saved = grammarAnswers[grammarIndex];
+  if (saved) {
+    const match = Array.from(root.querySelectorAll('input[name="gopt"]')).find((i) => i.value === saved);
+    if (match) match.checked = true;
+  }
+
+  document.getElementById("grammar-prev").addEventListener("click", () => {
+    saveCurrentGrammarSelection();
+    grammarIndex = Math.max(0, grammarIndex - 1);
+    buildGrammarCard();
+  });
+  document.getElementById("grammar-next").addEventListener("click", () => {
+    saveCurrentGrammarSelection();
+    if (grammarIndex < grammarRows.length - 1) {
+      grammarIndex += 1;
+      buildGrammarCard();
+    }
+  });
+}
+
+function trainingTopicFromRow(row) {
+  if (!row || typeof row !== "object") return "";
+  const direct = row["training topic"] ?? row["training topic "] ?? row["Training topic"];
+  if (direct != null && String(direct).trim()) return String(direct);
+  const hit = Object.entries(row).find(([k]) => k.replace(/\s+/g, " ").trim() === "training topic");
+  return hit ? String(hit[1]) : "";
+}
+
+function renderSpeaking(rows) {
+  const root = document.getElementById("speaking-root");
+  root.innerHTML = "";
+  const dataRows = rows.filter((r) => trainingTopicFromRow(r).trim().length > 0);
+  speakingTopicCount = dataRows.length;
+  dataRows.forEach((row, i) => {
+    const text = trainingTopicFromRow(row).replace(/\r\n/g, "\n").trim();
+    const theme = (row.theme || "").trim();
+    const block = document.createElement("div");
+    block.className = "speaking__topic";
+    block.innerHTML = `
+      <p class="speaking__label">トピック ${i + 1}${theme ? ` · ${escapeHtml(theme)}` : ""}</p>
+      <p class="speaking__text">${escapeHtml(text)}</p>
+      <label class="speaking__done">
+        <input type="checkbox" id="speaking-done-${i}" class="speaking__checkbox" />
+        <span>このトピックについて、LINE で録音・提出しました</span>
+      </label>
+    `;
+    root.appendChild(block);
+  });
+  if (!root.children.length) {
+    root.innerHTML =
+      '<p class="status status--error">Speaking シートの C 列にトピックが見つかりませんでした。</p>';
+    speakingTopicCount = 0;
+  }
+}
+
+function collectVocabAnswers() {
+  const areas = document.querySelectorAll("#vocab-root .vocab__input");
+  const items = [];
+  let i = 0;
+  vocabRows.forEach((row) => {
+    const en = (row.english || "").trim();
+    if (!en) return;
+    const ja = (row.japanese || "").trim();
+    const userText = areas[i] ? areas[i].value : "";
+    items.push({
+      english: en,
+      userAnswer: userText,
+      expectedJapanese: ja,
+      isCorrect: vocabIsCorrect(userText, ja),
+    });
+    i += 1;
+  });
+  return items;
+}
+
+function collectGrammarAnswers() {
+  saveCurrentGrammarSelection();
+  return grammarRows.map((row, idx) => {
+    const correct = (row.answer || "").trim();
+    const chosen = grammarAnswers[idx];
+    return {
+      question: (row.question || "").trim(),
+      chosen: chosen == null ? "" : chosen,
+      correctAnswer: correct,
+      isCorrect: chosen != null && chosen === correct,
+    };
+  });
+}
+
+function collectSpeakingStatus() {
+  const checks = document.querySelectorAll("#speaking-root .speaking__checkbox");
+  const done = Array.from(checks).filter((c) => c.checked).length;
+  const target = speakingTopicCount || 2;
+  return { completed: done, target, checks: Array.from(checks).map((c) => c.checked) };
+}
+
+function ratePercent(correct, total) {
+  if (!total) return 0;
+  return Math.round((correct / total) * 10000) / 100;
+}
+
+function buildPayload() {
+  const vocabItems = collectVocabAnswers();
+  const grammarItems = collectGrammarAnswers();
+  const speak = collectSpeakingStatus();
+
+  const vCorrect = vocabItems.filter((x) => x.isCorrect).length;
+  const vTotal = vocabItems.length;
+  const gCorrect = grammarItems.filter((x) => x.isCorrect).length;
+  const gTotal = grammarItems.length;
+  const target = speak.target || 2;
+  const sRate = ratePercent(speak.completed, target);
+
+  const out = {
+    name: participantName,
+    scores: {
+      vocabulary: {
+        correct: vCorrect,
+        total: vTotal,
+        ratePercent: ratePercent(vCorrect, vTotal),
+      },
+      grammar: {
+        correct: gCorrect,
+        total: gTotal,
+        ratePercent: ratePercent(gCorrect, gTotal),
+      },
+      speaking: {
+        completed: speak.completed,
+        target,
+        ratePercent: sRate,
+      },
+    },
+    raw: {
+      vocabulary: vocabItems,
+      grammar: grammarItems,
+      speaking: {
+        topicCount: speakingTopicCount,
+        submittedPerTopic: speak.checks,
+      },
+    },
+  };
+  if (SUBMIT_SECRET) out.secret = SUBMIT_SECRET;
+  return out;
+}
+
+function showToast(message, isError) {
+  const el = document.getElementById("submit-toast");
+  el.textContent = message;
+  el.classList.remove("hidden");
+  el.removeAttribute("hidden");
+  el.classList.toggle("toast--error", !!isError);
+}
+
+function downloadPayload(obj) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const safe = participantName.replace(/[^\w\u3000-\u9fff\u3040-\u30ff-]+/g, "_").slice(0, 40);
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `result_${safe}_${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function submitResults() {
+  const payload = buildPayload();
+  const btn = document.getElementById("btn-next");
+  btn.disabled = true;
+
+  if (!SUBMIT_URL || !SUBMIT_URL.trim()) {
+    downloadPayload(payload);
+    showToast(
+      "送信先 URL が未設定のため、結果を JSON でダウンロードしました。config.js に Apps Script の URL を設定してください。",
+      false
+    );
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    const res = await fetch(SUBMIT_URL.trim(), {
+      method: "POST",
+      mode: "cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text();
+    let data = {};
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = {};
+    }
+    if (!res.ok || data.ok === false) {
+      throw new Error(data.error || text || `HTTP ${res.status}`);
+    }
+    showToast("送信しました。スプレッドシートの「Results」「集計」をご確認ください。", false);
+  } catch (e) {
+    console.error(e);
+    downloadPayload(payload);
+    showToast(
+      "サーバー送信に失敗したため、結果を JSON で保存しました。ネットワーク・CORS・Apps Script のデプロイを確認してください。",
+      true
+    );
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadData() {
+  const vocabStatus = document.getElementById("vocab-status");
+  const grammarStatus = document.getElementById("grammar-status");
+  const speakingStatus = document.getElementById("speaking-status");
+
+  try {
+    const [vText, gText, sText] = await Promise.all([
+      fetchCsv(GVIZ("Vocabulary")),
+      fetchCsv(GVIZ("Grammar")),
+      fetchCsv(GVIZ("Speaking")),
+    ]);
+
+    const vocabParsed = parseCsv(vText);
+    if (vocabParsed.errors.length) console.warn(vocabParsed.errors);
+    vocabRows = vocabParsed.data.filter((r) => (r.english || "").trim());
+    vocabStatus.classList.add("hidden");
+    document.getElementById("vocab-root").classList.remove("hidden");
+    renderVocabulary(vocabRows);
+
+    const gParsed = parseCsv(gText);
+    grammarRows = gParsed.data.filter((r) => (r.question || "").trim());
+    grammarAnswers = grammarRows.map(() => null);
+    grammarStatus.classList.add("hidden");
+    document.getElementById("grammar-root").classList.remove("hidden");
+    grammarIndex = 0;
+    buildGrammarCard();
+
+    const sParsed = parseCsv(sText);
+    speakingStatus.classList.add("hidden");
+    document.getElementById("speaking-root").classList.remove("hidden");
+    renderSpeaking(sParsed.data);
+  } catch (e) {
+    console.error(e);
+    const msg =
+      "スプレッドシートの取得に失敗しました。ネットワーク接続を確認するか、共有設定を確認してください。";
+    [vocabStatus, grammarStatus, speakingStatus].forEach((el) => {
+      el.textContent = msg;
+      el.classList.add("status--error");
+    });
+  }
+}
+
+function startTest() {
+  const input = document.getElementById("participant-name");
+  const name = (input.value || "").trim();
+  const err = document.getElementById("intro-error");
+  if (!name) {
+    err.hidden = false;
+    input.focus();
+    return;
+  }
+  err.hidden = true;
+  participantName = name;
+  document.getElementById("participant-display").textContent = `実施者：${name}`;
+  document.getElementById("intro").classList.add("hidden");
+  document.getElementById("intro").setAttribute("hidden", "");
+  const flow = document.getElementById("test-flow");
+  flow.classList.remove("hidden");
+  flow.removeAttribute("hidden");
+  setStep(0);
+}
+
+document.getElementById("btn-start").addEventListener("click", startTest);
+document.getElementById("participant-name").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") startTest();
+});
+
+document.getElementById("btn-prev").addEventListener("click", () => {
+  if (currentStep === 1) saveCurrentGrammarSelection();
+  setStep(currentStep - 1);
+});
+document.getElementById("btn-next").addEventListener("click", () => {
+  if (currentStep === 1) saveCurrentGrammarSelection();
+  if (currentStep < 2) setStep(currentStep + 1);
+  else submitResults();
+});
+
+document.querySelectorAll("#test-flow .stepper__btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (currentStep === 1) saveCurrentGrammarSelection();
+    const go = Number(btn.getAttribute("data-go"));
+    if (!Number.isNaN(go)) setStep(go);
+  });
+});
+
+loadData();
