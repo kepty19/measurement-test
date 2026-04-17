@@ -188,3 +188,4 @@ function jsonResponse_(obj) {
   var out = ContentService.createTextOutput(JSON.stringify(obj));
   out.setMimeType(ContentService.MimeType.JSON);
   return out;
+}
