@@ -753,6 +753,63 @@ function buildPayload() {
   return out;
 }
 
+let thankYouReturnTimer = null;
+const THANKS_TO_INTRO_MS = 5000;
+
+function clearStoredSession() {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+function resetAnswerInputsForNextRun() {
+  document.querySelectorAll("#vocab-root .vocab__input").forEach((el) => {
+    el.value = "";
+  });
+  grammarAnswers = grammarRows.map(() => null);
+  grammarIndex = 0;
+  if (grammarRows.length) buildGrammarCard();
+  currentStep = 0;
+  setStep(0);
+}
+
+function returnToIntroFromThanks() {
+  thankYouReturnTimer = null;
+  const intro = document.getElementById("intro");
+  intro.classList.remove("hidden");
+  intro.removeAttribute("hidden");
+  intro.hidden = false;
+
+  const tf = document.getElementById("test-flow");
+  tf.classList.add("hidden");
+  tf.setAttribute("hidden", "");
+  tf.hidden = true;
+
+  const th = document.getElementById("screen-thanks");
+  th.classList.add("hidden");
+  th.setAttribute("hidden", "");
+  th.hidden = true;
+
+  participantName = "";
+  const nameInput = document.getElementById("participant-name");
+  if (nameInput) nameInput.value = "";
+  const err = document.getElementById("intro-error");
+  if (err) err.hidden = true;
+  const pd = document.getElementById("participant-display");
+  if (pd) pd.textContent = "";
+
+  resetAnswerInputsForNextRun();
+
+  const btn = document.getElementById("btn-next");
+  if (btn) btn.disabled = false;
+
+  clearStoredSession();
+  persistSessionState();
+}
+
 function showThankYou() {
   document.getElementById("intro").classList.add("hidden");
   document.getElementById("intro").setAttribute("hidden", "");
@@ -765,6 +822,9 @@ function showThankYou() {
   th.removeAttribute("hidden");
   th.hidden = false;
   persistSessionState();
+
+  if (thankYouReturnTimer) clearTimeout(thankYouReturnTimer);
+  thankYouReturnTimer = setTimeout(returnToIntroFromThanks, THANKS_TO_INTRO_MS);
 }
 
 function downloadPayload(obj) {
@@ -966,7 +1026,13 @@ loadData()
   })
   .catch((e) => console.error(e));
 
-window.addEventListener("pagehide", persistSessionState);
+window.addEventListener("pagehide", () => {
+  if (thankYouReturnTimer) {
+    clearTimeout(thankYouReturnTimer);
+    thankYouReturnTimer = null;
+  }
+  persistSessionState();
+});
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") persistSessionState();
 });
