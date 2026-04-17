@@ -1,28 +1,30 @@
 /**
- * 現状把握テスト — 結果をスプレッドシートに記録し、「集計」シートを氏名キーで更新する。
+ * 現状把握テスト — 「Result」1シートにスコア＋氏名キー集計、「raw data」に単語・文法のローデータを記録する。
+ * スピーキングは LINE 側で取得するためここには書き込まない。
  *
  * セットアップ:
  * 1. このスプレッドシートに紐づけてプロジェクトを作成し、本ファイルを貼り付ける。
- * 2. SPREADSHEET_ID をこのブックの ID に設定（通常は自動で SpreadsheetApp.getActiveSpreadsheet() でも可）。
+ * 2. SPREADSHEET_ID をこのブックの ID に合わせる。
  * 3. デプロイ → 新しいデプロイ → 種類: ウェブアプリ
  *    - 次のユーザーとして実行: 自分
  *    - アクセスできるユーザー: 全員（匿名ユーザーを含む）
- * 4. 発行された URL をフロントの SUBMIT_URL に設定。
+ * 4. 発行された URL をフロントの config.js の SUBMIT_URL に設定。
  * 5. （任意）SECRET を設定し、フロントの SUBMIT_SECRET と一致させる。
+ *
+ * 旧「Results」「集計」シートを使っていた場合は、不要なら削除してよい。
  */
 
 var SPREADSHEET_ID = '19GdI5qQWc-VyLQEgRiJfaxxTLwrtxU6ofx4tZYPax0M';
-/** 空文字なら検証しない */
 var SECRET = '';
 
-var SHEET_RESULTS = 'Results';
-var SHEET_SUMMARY = '集計';
+var SHEET_RESULT = 'Result';
+var SHEET_RAW = 'raw data';
 
 function getSs_() {
   return SpreadsheetApp.openById(SPREADSHEET_ID);
 }
 
-function ensureResultsHeaders_(sh) {
+function ensureResultHeaders_(sh) {
   if (sh.getLastRow() >= 1) return;
   sh.appendRow([
     '実施日時',
@@ -33,28 +35,89 @@ function ensureResultsHeaders_(sh) {
     '文法_正答数',
     '文法_問題数',
     '文法_正答率',
-    'スピーキング_完了数',
-    'スピーキング_目標数',
-    'スピーキング_完了率',
-    '単語_回答JSON',
-    '文法_回答JSON',
-    'スピーキング_JSON',
+    '受験回数_累計',
+    '単語_平均正答率_累計',
+    '文法_平均正答率_累計',
   ]);
 }
 
-function ensureSummaryHeaders_(sh) {
+function ensureRawHeaders_(sh) {
   if (sh.getLastRow() >= 1) return;
-  sh.appendRow([
-    '氏名',
-    '最新実施日時',
-    '受験回数',
-    '単語_平均正答率',
-    '文法_平均正答率',
-    'スピーキング_平均完了率',
-    '単語_最新正答率',
-    '文法_最新正答率',
-    'スピーキング_最新完了率',
-  ]);
+  sh.appendRow(['実施日時', '氏名', 'セクション', '問題番号', '問題文', '正解', '回答', '合否']);
+}
+
+function buildAggregates_(resultSheet, name, vRate, gRate) {
+  var data = resultSheet.getDataRange().getValues();
+  if (data.length < 2) {
+    return { n: 1, avgV: numOr_(vRate), avgG: numOr_(gRate) };
+  }
+  var header = data[0];
+  var idxName = header.indexOf('氏名');
+  var idxVr = header.indexOf('単語_正答率');
+  var idxGr = header.indexOf('文法_正答率');
+  if (idxName < 0) idxName = 1;
+  if (idxVr < 0) idxVr = 4;
+  if (idxGr < 0) idxGr = 7;
+
+  var sumV = 0;
+  var sumG = 0;
+  var count = 0;
+  for (var r = 1; r < data.length; r++) {
+    if (String(data[r][idxName]).trim() === name) {
+      count++;
+      sumV += Number(data[r][idxVr]) || 0;
+      sumG += Number(data[r][idxGr]) || 0;
+    }
+  }
+  count++;
+  sumV += Number(vRate) || 0;
+  sumG += Number(gRate) || 0;
+  return {
+    n: count,
+    avgV: Math.round((sumV / count) * 100) / 100,
+    avgG: Math.round((sumG / count) * 100) / 100,
+  };
+}
+
+function appendRawData_(ss, iso, name, vocabRaw, grammarRaw) {
+  var raw = ss.getSheetByName(SHEET_RAW);
+  if (!raw) raw = ss.insertSheet(SHEET_RAW);
+  ensureRawHeaders_(raw);
+
+  var vmax = Math.min(20, vocabRaw.length);
+  var gmax = Math.min(20, grammarRaw.length);
+
+  for (var i = 0; i < vmax; i++) {
+    var item = vocabRaw[i];
+    raw.appendRow([
+      iso,
+      name,
+      '単語',
+      i + 1,
+      item.english || '',
+      item.expectedJapanese || '',
+      item.userAnswer || '',
+      item.isCorrect ? '○' : '×',
+    ]);
+  }
+  for (var j = 0; j < gmax; j++) {
+    var g = grammarRaw[j];
+    raw.appendRow([
+      iso,
+      name,
+      '文法',
+      j + 1,
+      g.question || '',
+      g.correctAnswer || '',
+      g.chosen || '',
+      g.isCorrect ? '○' : '×',
+    ]);
+  }
+}
+
+function numOr_(x) {
+  var n = Number(x);
+  return isNaN(n) ? 0 : Math.round(n * 100) / 100;
 }
 
 function doPost(e) {
@@ -69,28 +132,28 @@ function doPost(e) {
       return jsonResponse_({ ok: false, error: 'unauthorized' });
     }
 
-    var ss = getSs_();
-    var results = ss.getSheetByName(SHEET_RESULTS);
-    if (!results) results = ss.insertSheet(SHEET_RESULTS);
-    ensureResultsHeaders_(results);
-
     var name = String(body.name || '').trim();
     if (!name) {
       return jsonResponse_({ ok: false, error: 'name required' });
     }
 
+    var v = body.scores && body.scores.vocabulary ? body.scores.vocabulary : {};
+    var g = body.scores && body.scores.grammar ? body.scores.grammar : {};
+
     var now = new Date();
     var iso = Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ssXXX");
 
-    var v = body.scores && body.scores.vocabulary ? body.scores.vocabulary : {};
-    var g = body.scores && body.scores.grammar ? body.scores.grammar : {};
-    var s = body.scores && body.scores.speaking ? body.scores.speaking : {};
+    var vocabRaw = body.raw && body.raw.vocabulary ? body.raw.vocabulary : [];
+    var grammarRaw = body.raw && body.raw.grammar ? body.raw.grammar : [];
 
-    var vocabJson = JSON.stringify(body.raw && body.raw.vocabulary ? body.raw.vocabulary : {});
-    var grammarJson = JSON.stringify(body.raw && body.raw.grammar ? body.raw.grammar : {});
-    var speakJson = JSON.stringify(body.raw && body.raw.speaking ? body.raw.speaking : {});
+    var ss = getSs_();
+    var resultSheet = ss.getSheetByName(SHEET_RESULT);
+    if (!resultSheet) resultSheet = ss.insertSheet(SHEET_RESULT);
+    ensureResultHeaders_(resultSheet);
 
-    results.appendRow([
+    var agg = buildAggregates_(resultSheet, name, v.ratePercent, g.ratePercent);
+
+    resultSheet.appendRow([
       iso,
       name,
       num_(v.correct),
@@ -99,15 +162,12 @@ function doPost(e) {
       num_(g.correct),
       num_(g.total),
       num_(g.ratePercent),
-      num_(s.completed),
-      num_(s.target),
-      num_(s.ratePercent),
-      vocabJson,
-      grammarJson,
-      speakJson,
+      agg.n,
+      agg.avgV,
+      agg.avgG,
     ]);
 
-    refreshSummaryForName_(ss, name);
+    appendRawData_(ss, iso, name, vocabRaw, grammarRaw);
 
     return jsonResponse_({ ok: true });
   } catch (err) {
@@ -123,7 +183,6 @@ function num_(x) {
   return isNaN(n) ? '' : n;
 }
 
-/** デプロイ確認用（ブラウザで URL を開いて応答が返れば有効） */
 function doGet() {
   return jsonResponse_({ ok: true, message: 'measurement-test endpoint' });
 }
@@ -132,69 +191,4 @@ function jsonResponse_(obj) {
   var out = ContentService.createTextOutput(JSON.stringify(obj));
   out.setMimeType(ContentService.MimeType.JSON);
   return out;
-}
-
-/**
- * Results から氏名が一致する行を集計し、集計シートの該当行を更新（なければ追加）。
- */
-function refreshSummaryForName_(ss, name) {
-  var results = ss.getSheetByName(SHEET_RESULTS);
-  if (!results || results.getLastRow() < 2) return;
-
-  var data = results.getDataRange().getValues();
-  var header = data[0];
-  var idxName = header.indexOf('氏名');
-  var idxTime = header.indexOf('実施日時');
-  var idxVr = header.indexOf('単語_正答率');
-  var idxGr = header.indexOf('文法_正答率');
-  var idxSr = header.indexOf('スピーキング_完了率');
-  if (idxName < 0) idxName = 1;
-
-  var rows = [];
-  for (var r = 1; r < data.length; r++) {
-    if (String(data[r][idxName]).trim() === name) rows.push(data[r]);
-  }
-  if (!rows.length) return;
-
-  var n = rows.length;
-  var last = rows[rows.length - 1];
-  var sumV = 0;
-  var sumG = 0;
-  var sumS = 0;
-  for (var i = 0; i < rows.length; i++) {
-    sumV += Number(rows[i][idxVr]) || 0;
-    sumG += Number(rows[i][idxGr]) || 0;
-    sumS += Number(rows[i][idxSr]) || 0;
-  }
-
-  var summary = ss.getSheetByName(SHEET_SUMMARY);
-  if (!summary) summary = ss.insertSheet(SHEET_SUMMARY);
-  ensureSummaryHeaders_(summary);
-
-  var sData = summary.getDataRange().getValues();
-  var rowIndex = -1;
-  for (var sr = 1; sr < sData.length; sr++) {
-    if (String(sData[sr][0]).trim() === name) {
-      rowIndex = sr + 1;
-      break;
-    }
-  }
-
-  var newRow = [
-    name,
-    last[idxTime],
-    n,
-    Math.round((sumV / n) * 100) / 100,
-    Math.round((sumG / n) * 100) / 100,
-    Math.round((sumS / n) * 100) / 100,
-    last[idxVr],
-    last[idxGr],
-    last[idxSr],
-  ];
-
-  if (rowIndex > 0) {
-    summary.getRange(rowIndex, 1, rowIndex, newRow.length).setValues([newRow]);
-  } else {
-    summary.appendRow(newRow);
-  }
 }
