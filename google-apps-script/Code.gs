@@ -2,6 +2,9 @@
  * 現状把握テスト — 「Result」1シートにスコア＋氏名キー集計、「raw data」に単語・文法のローデータを記録する。
  * スピーキングは LINE 側で取得するためここには書き込まない。
  *
+ * Result シートの E・H・J・K 列（単語_正答率・文法_正答率・各平均）はスプレッドシート側の関数用のため、
+ * スクリプトからは書き込まない（行の他列のみ setValues）。
+ *
  * セットアップ:
  * 1. このスプレッドシートに紐づけてプロジェクトを作成し、本ファイルを貼り付ける。
  * 2. SPREADSHEET_ID をこのブックの ID に合わせる。
@@ -153,19 +156,13 @@ function doPost(e) {
 
     var agg = buildAggregates_(resultSheet, name, v.ratePercent, g.ratePercent);
 
-    resultSheet.appendRow([
-      iso,
-      name,
-      num_(v.correct),
-      num_(v.total),
-      num_(v.ratePercent),
-      num_(g.correct),
-      num_(g.total),
-      num_(g.ratePercent),
-      agg.n,
-      agg.avgV,
-      agg.avgG,
+    var row = resultSheet.getLastRow() + 1;
+    // A–D, F–G, I のみ。E・H・J・K は空欄のまま（列ごとの数式用）
+    resultSheet.getRange(row, 1, row, 4).setValues([
+      [iso, name, num_(v.correct), num_(v.total)],
     ]);
+    resultSheet.getRange(row, 6, row, 7).setValues([[num_(g.correct), num_(g.total)]]);
+    resultSheet.getRange(row, 9, row, 9).setValues([[agg.n]]);
 
     appendRawData_(ss, iso, name, vocabRaw, grammarRaw);
 

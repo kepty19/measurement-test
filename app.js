@@ -54,7 +54,8 @@ function escapeHtml(s) {
  * 1) NFKC 正規化・前後空白除去・連続空白を1つにまとめる（英数字は全半統一）
  * 2) 完全一致（正解文全体、または / ・ 、 などで区切った別表記のいずれか）
  * 3) 別表記セグメントや全文について、表記ゆれを許容した「含む」一致（短すぎる1文字のみは除外）
- * 4) レーベンシュタイン距離に基づく類似度が一定以上なら正解（短い語句向け）
+ * 4) レーベンシュタイン類似度（厳しめ → やや緩めの二段）
+ * 5) 同義・類義クラスタ（品詞ゆれ・別表現）— 正解文のいずれかと同じグループなら正解
  */
 function normalizeJa(s) {
   return String(s)
@@ -97,6 +98,53 @@ function similarityRatio(a, b) {
   return 1 - d / Math.max(a.length, b.length);
 }
 
+/** 正解文・学習者解答のどちらかと同じグループにあれば正解（品詞ゆれ・別表現・よくある言い換え） */
+const VOCAB_SYNONYM_CLUSTERS = [
+  ["贈り物", "プレゼント", "ギフト"],
+  ["退屈", "退屈な", "暇", "つまらない", "うんざり"],
+  ["起こる", "発生", "生じる"],
+  ["栄養に富む", "栄養のある", "栄養素", "栄養", "栄養満点"],
+  ["変形させる", "変形する", "変える", "変わる", "変化する", "変化", "変形"],
+  ["鋭い", "するどい", "鋭敏"],
+  ["痛み", "痛い", "苦痛", "疼痛"],
+  ["若さ", "若い", "青年", "若者"],
+  ["好奇心が強い", "好奇心", "興味", "興味深い"],
+  ["人気のある", "人気"],
+];
+
+function clusterSynonymMatch(userText, expectedJa) {
+  const u = normalizeJa(userText);
+  if (!u || u.length < 2) return false;
+  const parts = splitAnswerVariants(expectedJa);
+  const expChunks = [
+    ...parts.map((p) => normalizeJa(String(p).trim())),
+    normalizeJa(expectedJa),
+  ].filter((x) => x && x.length > 0);
+
+  for (const cluster of VOCAB_SYNONYM_CLUSTERS) {
+    const norms = cluster.map((c) => normalizeJa(c)).filter((n) => n.length > 0);
+    const userHits = norms.some((n) => {
+      if (u === n) return true;
+      if (u.length >= 2 && (u.includes(n) || n.includes(u))) return true;
+      return false;
+    });
+    if (!userHits) continue;
+    const expHits = expChunks.some((exp) =>
+      norms.some((n) => {
+        if (!exp || !n) return false;
+        if (exp === n) return true;
+        if (exp.length >= 2 && n.length >= 2 && (exp.includes(n) || n.includes(exp))) return true;
+        return false;
+      })
+    );
+    if (expHits) return true;
+  }
+  return false;
+}
+
+const SIM_STRICT = 0.78;
+const SIM_RELAXED = 0.64;
+
 function vocabIsCorrect(userText, expectedJa) {
   const u = normalizeJa(userText);
   if (!u) return false;
@@ -120,11 +168,23 @@ function vocabIsCorrect(userText, expectedJa) {
     if (u.includes(p) || p.includes(u)) return true;
     const pp = stripNoise(p);
     if (pp.length >= minSub && (uPlain.includes(pp) || pp.includes(uPlain))) return true;
-    if (similarityRatio(u, p) >= 0.78) return true;
-    if (pp.length >= 3 && similarityRatio(uPlain, pp) >= 0.78) return true;
+    if (similarityRatio(u, p) >= SIM_STRICT) return true;
+    if (pp.length >= 3 && similarityRatio(uPlain, pp) >= SIM_STRICT) return true;
   }
-  if (full.length >= 3 && similarityRatio(u, full) >= 0.78) return true;
-  if (fullPlain.length >= 3 && similarityRatio(uPlain, fullPlain) >= 0.78) return true;
+  if (full.length >= 3 && similarityRatio(u, full) >= SIM_STRICT) return true;
+  if (fullPlain.length >= 3 && similarityRatio(uPlain, fullPlain) >= SIM_STRICT) return true;
+
+  if (clusterSynonymMatch(userText, expectedJa)) return true;
+
+  for (const p of parts) {
+    if (!p) continue;
+    const pn = normalizeJa(p);
+    if (pn.length >= 2 && similarityRatio(u, pn) >= SIM_RELAXED) return true;
+    const pp = stripNoise(p);
+    if (pp.length >= 2 && similarityRatio(uPlain, pp) >= SIM_RELAXED) return true;
+  }
+  if (full.length >= 2 && similarityRatio(u, full) >= SIM_RELAXED) return true;
+  if (fullPlain.length >= 2 && similarityRatio(uPlain, fullPlain) >= SIM_RELAXED) return true;
 
   return false;
 }
